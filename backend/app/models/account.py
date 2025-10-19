@@ -5,8 +5,8 @@ from app.core.database import Base
 from uuid import uuid4
 
 
-class Member(Base):
-    __tablename__ = 'member'
+class User(Base):
+    __tablename__ = 'users'
 
     uuid = Column(UUID(as_uuid=True), default=uuid4)
     user_id = Column(String, primary_key=True)       # 사용자 아이디

@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from app.api.v1.user import router as user_router
-from app.models import user as user_models
+from app.api.v1.account import router as user_router
+from app.models import account as account_models
 from app.core.database import init_db, close_db, get_db, db_healthcheck
 from app.core.redis import init_redis, close_redis, get_redis
 
