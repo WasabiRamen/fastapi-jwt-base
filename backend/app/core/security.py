@@ -1,6 +1,7 @@
 import re
-from datetime import datetime, timedelta
-from redis import asyncio as aioredis
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import uuid4
 
@@ -75,3 +76,89 @@ class PasswordManager:
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """평문 비밀번호와 해시를 비교합니다. bcrypt.checkpw는 안전한 비교를 수행합니다."""
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    
+
+class JWTManager:
+    """JWT 생성 및 검증 유틸리티
+
+    - HS256 알고리즘 사용
+    - 토큰 만료 시간 설정 가능
+    """
+
+    SECRET_KEY = '3tL5qvicpGKyTJ0yyooss7lEAh+iZ075pW+J+Y3n32o='
+    # SECRET_KEY_ROTATION_DAYS = 30 # 아직 비밀키 교체 로직 미구현
+
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 기본 만료 시간(분)
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    async def _secret_key_rotation() -> None:
+        pass
+
+
+    @classmethod
+    async def create_token(cls, uuid: str) -> tuple[str, int, int]:
+        """JWT 토큰 생성"""
+
+        sub = str(uuid)
+        iat = round(datetime.now(timezone.utc).timestamp())
+        exp = iat + cls.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+        payload = {
+            "sub": sub,
+            "iat": iat,
+            "exp": exp
+        }
+
+        encoded_jwt = jwt.encode(payload, cls.SECRET_KEY, algorithm=cls.ALGORITHM)
+        return encoded_jwt, exp, iat
+
+    @classmethod
+    async def verify_token(cls, token: str) -> dict:
+        """JWT 토큰 검증 및 payload 반환. 실패 시 예외 발생"""
+        try:
+            payload = jwt.decode(token, cls.SECRET_KEY, algorithms=[cls.ALGORITHM])
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise ValueError("토큰이 만료되었습니다.")
+        except jwt.InvalidTokenError:
+            raise ValueError("유효하지 않은 토큰입니다.")
+        
+
+class RefreshTokenManager:
+    """
+    리프래시 토큰 관리 유틸리티
+
+    토큰 형식 -> CSPRNG 기반 32바이트 랜덤 문자열
+    """
+    TOKEN_BYTE_LENGTH = 32
+    STORE_HASHED_REFRESH_TOKENS = False  # 해시 저장 여부 설정
+    REFRESH_TOKEN_EXPIRE_DAYS = 30  # 리프래시 토큰 만료 기간 (일)
+
+    @staticmethod
+    def get_expiration_datetime() -> datetime:
+        create_at = round(datetime.now(timezone.utc).timestamp())
+        max_age = RefreshTokenManager.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        expires_at = create_at + max_age
+        return create_at, expires_at, max_age
+
+    @classmethod
+    async def create_token(cls) -> tuple[str, int, int, int]:
+        """CSPRNG 기반 리프래시 토큰 생성"""
+        create_at, expires_at, max_age = cls.get_expiration_datetime()
+        token = secrets.token_urlsafe(cls.TOKEN_BYTE_LENGTH)
+        if cls.STORE_HASHED_REFRESH_TOKENS:
+            hash_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
+            return hash_token
+        return token, create_at, expires_at, max_age
+    
+    @classmethod
+    async def verify_token(cls, token: str, stored_token: str) -> bool:
+        """리프래시 토큰 검증"""
+        if cls.STORE_HASHED_REFRESH_TOKENS:
+            hash_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
+            return hash_token == stored_token
+        return token == stored_token

@@ -1,11 +1,12 @@
-from sqlalchemy import Column, Boolean, String
+from sqlalchemy import Column, Boolean, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
 from app.core.database import Base
 from uuid import uuid4
 
 
-class Member(Base):
-    __tablename__ = 'member'
+class User(Base):
+    __tablename__ = 'users'
 
     uuid = Column(UUID(as_uuid=True), default=uuid4)
     user_id = Column(String, primary_key=True)       # 사용자 아이디
@@ -20,11 +21,10 @@ class Member(Base):
 class RefreshToken(Base):
     __tablename__ = 'refresh_tokens'
 
-    uuid = Column(String, primary_key=True)
-    user_id = Column(String)
-    refresh_token = Column(String, nullable=False)
-    expires_at = Column(String, nullable=False)
-    created_at = Column(String, default='now()')
+    refresh_token = Column(String, nullable=False, primary_key=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid4, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     user_agent = Column(String)
     ip_address = Column(String)
     is_active = Column(Boolean, default=True)  # 토큰 활성화 여부

@@ -15,3 +15,14 @@ class UserCreate(BaseModel):
 class CreateToken(BaseModel):
     user_id: str
     password: str
+
+
+class VerifyPassword(BaseModel):
+    user_id: str
+    password: str
+
+
+class ChangePassword(BaseModel):
+    user_id: str
+    old_password: str
+    new_password: str
