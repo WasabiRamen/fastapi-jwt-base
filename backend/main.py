@@ -1,22 +1,24 @@
 from fastapi import FastAPI
-from redis import asyncio as aioredis
 from contextlib import asynccontextmanager
 
 from app.api.v1.user import router as user_router
 from app.models import user as user_models
-from app.core.database import engine, get_db
+from app.core.database import init_db, close_db, get_db, db_healthcheck
+from app.core.redis import init_redis, close_redis, get_redis
 
-def get_redis_url():
-    return "redis://localhost"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.redis = await aioredis.from_url(get_redis_url(), decode_responses=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(user_models.Base.metadata.create_all)
+    # Startup: 전역 리소스 준비
+    await init_db(app)
+    await init_redis(app)
+    try:
+        yield
+    finally:
+        # Shutdown: 전역 리소스 정리
+        await close_redis(app)
+        await close_db(app)
 
-    yield
-    await app.state.redis.close()
 
 app = FastAPI(lifespan=lifespan)
 
