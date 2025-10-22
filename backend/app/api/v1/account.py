@@ -6,17 +6,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.cookie import CookieManager
-import app.schemas.account as account_schema
-import app.crud.account as account_crud
 import app.core.security as security
+import app.crud.account_crud as account_crud
+import app.schemas.account_schemas as account_schema
+from app.exceptions.account_exceptions import (
+    UserNotFoundException,
+    InvalidPasswordException,
+    UserAlreadyExistsException,
+    TokenNotFoundException,
+    InvalidTokenException,
+    SamePasswordException
+)
 
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/accounts/token")
 
+"""
+@Todo: IP 주소 가져오는 모듈 -> SecurityManager 등으로 이동 고려
+@Todo: /refresh 엔드포인트 리팩토링 고려 (중복 코드 제거)
+
+
+refresh token 흐름이 잘못됨
+
+_get_client_ip -> 어차피 refresh token 시점에만 필요해서 다른 곳으로 이동
+refresh token은 자체적으로 검증이 가능함.
+"""
+
+
 
 def _get_client_ip(request: Request) -> str:
+    """
+    클라이언트 IP 주소 가져오기
+
+    우선순위: X-Forwarded-For > X-Real-IP > request.client.host
+    """
     xff = request.headers.get("x-forwarded-for")
     if xff:
         return xff.split(",")[0].strip()
@@ -34,31 +59,28 @@ async def create_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
+    """
+    액세스 토큰 및 리프래시 토큰 발급
+    
+    OAuth2 폼 사용
+    아이디 비밀번호 검증 후 토큰 발급
+    """
     user_exist = await account_crud.exist_user_by_id(db, form_data.username)
     if not user_exist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="존재하지 않는 사용자 아이디입니다."
-        )
+        raise UserNotFoundException(form_data.username)
 
     user_query = await account_crud.verify_password(db, form_data.username, form_data.password)
     if not user_query:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비밀번호가 일치하지 않습니다."
-        )
+        raise InvalidPasswordException()
 
-    access_token, expires, max_age = await security.JWTManager.create_token(user_query.uuid)
-    resp = JSONResponse({"access_token": access_token, "token_type": "bearer"})
-    resp = CookieManager.set_access_token_cookie(resp, access_token, expires, max_age)
-
-    refresh_token, expires, max_age = await account_crud.create_refresh_token(
-        db,
-        user_query.uuid,
-        ip_address=_get_client_ip(request),
-        user_agent=request.headers.get("user-agent")
-        )
-    resp = CookieManager.set_refresh_token_cookie(resp, refresh_token, expires, max_age)
+    access = security.JWTManager.create_token(user_query.uuid)
+    refresh = await account_crud.create_refresh_token(db, user_query.uuid, ip_address=_get_client_ip(request), user_agent=request.headers.get("user-agent"))
+    resp = JSONResponse({"access_token": access.token, "token_type": "bearer"})
+    resp = CookieManager.set_token_cookies(
+        resp,
+        access.token, access.expires_at, access.expires_in,
+        refresh.token, refresh.expires_at, refresh.expires_in
+    )
     return resp
 
 
@@ -68,40 +90,19 @@ async def refresh_token(
     db: AsyncSession = Depends(get_db),
 ):
     """리프래시 토큰으로 액세스 토큰 재발급"""
-    refresh_token = request.cookies.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="리프래시 토큰이 존재하지 않습니다."
-        )
+    old_refresh_token = request.cookies.get("refresh_token")
+    refresh_token = await account_crud.rotate_refresh_token(db, old_refresh_token, ip_address=_get_client_ip(request), user_agent=request.headers.get("user-agent"))
 
-    payload = await security.JWTManager.verify_token(refresh_token)
-    user_uuid = payload.get("sub")
-    if user_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 리프래시 토큰입니다."
-        )
+    if type(refresh_token) == str:
+        raise InvalidTokenException(refresh_token)
 
-    is_valid = await account_crud.validate_refresh_token(db, user_uuid, refresh_token)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 리프래시 토큰입니다."
-        )
-
-    await account_crud.deactivate_refresh_token(db, user_uuid, refresh_token)
-
-    access_token, expires, max_age = await security.JWTManager.create_token(user_uuid)
-    resp = JSONResponse({"access_token": access_token, "token_type": "bearer"})
-    resp = CookieManager.set_access_token_cookie(resp, access_token, expires, max_age)
-    refresh_token, expires, max_age = await account_crud.create_refresh_token(
-        db,
-        user_uuid,
-        ip_address=_get_client_ip(request),
-        user_agent=request.headers.get("user-agent")
-        )
-    resp = CookieManager.set_refresh_token_cookie(resp, refresh_token, expires, max_age)
+    access = security.JWTManager.create_token(refresh_token.uuid)
+    resp = JSONResponse({"access_token": access.token, "token_type": "bearer"})
+    resp = CookieManager.set_token_cookies(
+        resp,
+        access.token, access.expires_at, access.expires_in,
+        refresh_token.token, refresh_token.expires_at, refresh_token.expires_in
+    )
     return resp
 
 
@@ -125,8 +126,7 @@ async def logout(
         await account_crud.deactivate_refresh_token(db, user_uuid, refresh_token)
 
     resp = JSONResponse({"message": "로그아웃 되었습니다."})
-    resp.delete_cookie("access_token", path="/")
-    resp.delete_cookie("refresh_token", path="/")
+    resp = CookieManager.delete_token_cookies(resp)
     return resp
 
 
@@ -136,12 +136,9 @@ async def verify_password(
     db: AsyncSession = Depends(get_db)
 ):
     """사용자 인증"""
-    user_query = await account_crud.verify_password(db, user.user_비id, user.password)
+    user_query = await account_crud.verify_password(db, user.user_id, user.password)
     if not user_query:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비밀번호가 일치하지 않습니다."
-        )
+        raise InvalidPasswordException()
     return {"message": "비밀번호가 일치합니다."}
 
 
@@ -152,16 +149,11 @@ async def change_password(
 ):
     user_query = await account_crud.verify_password(db, user.user_id, user.old_password)
     if not user_query:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="기존 비밀번호가 일치하지 않습니다."
-        )
+        raise InvalidPasswordException()
 
     if user.old_password == user.new_password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="기존 비밀번호와 동일한 비밀번호로 변경할 수 없습니다."
-        )
+        raise SamePasswordException()
+    
     await account_crud.change_password(db, user.user_id, user.new_password)
     return {"message": "비밀번호가 변경되었습니다."}
 
@@ -174,10 +166,8 @@ async def create_user(
     """사용자 생성"""
     exist_user = await account_crud.exist_user_by_id(db, user.user_id)
     if exist_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미 존재하는 사용자 아이디입니다."
-        )
+        raise UserAlreadyExistsException(user.user_id)
+    
     await account_crud.create_user(db, user.user_id, user.password)
     return {"message": "사용자가 생성되었습니다."}
 
@@ -189,10 +179,7 @@ async def exist_user_id(
 ):
     user = await account_crud.exist_user_by_id(db, user_id)
     if user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미 존재하는 사용자 아이디입니다."
-        )
+        raise UserAlreadyExistsException(user_id)
     return True
 
 
@@ -202,17 +189,17 @@ async def get_user_info(
     db: AsyncSession = Depends(get_db)
 ):
     """토큰으로 사용자 정보 조회"""
-    payload = await security.JWTManager.verify_token(token)
+    try:
+        payload = security.JWTManager.verify_token(token)
+    except ValueError:
+        raise InvalidTokenException("액세스 토큰")
+        
     user_uuid = payload.get("sub")
     if user_uuid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 토큰입니다."
-        )
+        raise InvalidTokenException("액세스 토큰")
+        
     user = await account_crud.get_user_by_uuid(db, user_uuid)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="사용자를 찾을 수 없습니다."
-        )
+        raise UserNotFoundException()
+        
     return {"user_id": user.user_id, "uuid": str(user.uuid)}

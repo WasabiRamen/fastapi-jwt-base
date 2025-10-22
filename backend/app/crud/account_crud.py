@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.account import User, RefreshToken
+from app.models.account_model import User, RefreshToken
 
 import app.core.security as security
 
@@ -54,7 +54,7 @@ async def create_refresh_token(
         uuid: str, 
         ip_address: str = None, 
         user_agent: str = None
-        ) -> tuple[str, int, int]:
+        ) -> security.RefreshTokenResponse:
     """리프래시 토큰 생성 및 저장"""
     # 기존 활성화된 토큰 비활성화
     db_query = await db.execute(
@@ -70,23 +70,29 @@ async def create_refresh_token(
     await db.commit()
 
     # 새로운 리프래시 토큰 생성
-    refresh_token, created_at, expires_at, max_age = await security.RefreshTokenManager.create_token()
+    refresh = security.RefreshTokenManager.create_token()
+
     db_refresh_token = RefreshToken(
-        refresh_token=refresh_token,
+        refresh_token=refresh.token,
         uuid=uuid,
-        expires_at=ts_to_dt(expires_at),
-        created_at=ts_to_dt(created_at),
+        expires_at=ts_to_dt(refresh.expires_at),
+        created_at=ts_to_dt(refresh.create_at),
         ip_address=ip_address,
         user_agent=user_agent
     )
     db.add(db_refresh_token)
     await db.commit()
     await db.refresh(db_refresh_token)
-    return db_refresh_token.refresh_token, expires_at, max_age
+    return refresh
 
 
-async def deactivate_refresh_token(db: AsyncSession, uuid: str, refresh_token: str) -> None:
-    """리프래시 토큰 비활성화"""
+async def rotate_refresh_token(
+        db: AsyncSession,
+        refresh_token: str,
+        ip_address: str = None,
+        user_agent: str = None
+    ) -> security.RefreshTokenResponse:
+    """리프래시 토큰 재발급(로테이션)"""
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.refresh_token == refresh_token,
@@ -94,27 +100,71 @@ async def deactivate_refresh_token(db: AsyncSession, uuid: str, refresh_token: s
         )
     )
     db_token = result.scalars().first()
+
+    token_validation_error = "리프래시 토큰이 유효하지 않습니다."
+
+    # 토큰이 DB상 존재하지 않음
     if not db_token:
-        return
+        return token_validation_error
 
-    # 동일한 uuid이면 해당 토큰만 비활성화
-    if db_token.uuid == uuid:
-        db_token.is_active = False
-        db.add(db_token)
-        await db.commit()
-        return
+    # 만료된 토큰일 경우
+    now_utc = datetime.now(timezone.utc).timestamp()
 
-    # uuid 불일치: 해당 토큰의 uuid와 연관된 모든 활성 토큰 비활성화
-    result_all = await db.execute(
-        select(RefreshToken).where(
-            RefreshToken.uuid == db_token.uuid,
-            RefreshToken.is_active == True
-        )
-    )
-    for token in result_all.scalars().all():
-        token.is_active = False
-        db.add(token)
+    db_token.is_active = False
+    db.add(db_token)
     await db.commit()
+
+    if db_token.expires_at.timestamp() < now_utc:
+        return token_validation_error
+
+    # 검증 완료
+    refresh = security.RefreshTokenManager.create_token(user_uuid=str(db_token.uuid))
+
+    db_refresh_token = RefreshToken(
+        refresh_token=refresh.token,
+        uuid=db_token.uuid,
+        expires_at=ts_to_dt(refresh.expires_at),
+        created_at=ts_to_dt(refresh.create_at),
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+    db.add(db_refresh_token)
+    await db.commit()
+    await db.refresh(db_refresh_token)
+
+    return refresh
+
+
+# async def deactivate_refresh_token(db: AsyncSession, uuid: str, refresh_token: str) -> None:
+#     """리프래시 토큰 비활성화"""
+#     result = await db.execute(
+#         select(RefreshToken).where(
+#             RefreshToken.refresh_token == refresh_token,
+#             RefreshToken.is_active == True
+#         )
+#     )
+#     db_token = result.scalars().first()
+#     if not db_token:
+#         return
+
+#     # 동일한 uuid이면 해당 토큰만 비활성화
+#     if db_token.uuid == uuid:
+#         db_token.is_active = False
+#         db.add(db_token)
+#         await db.commit()
+#         return
+
+#     # uuid 불일치: 해당 토큰의 uuid와 연관된 모든 활성 토큰 비활성화
+#     result_all = await db.execute(
+#         select(RefreshToken).where(
+#             RefreshToken.uuid == db_token.uuid,
+#             RefreshToken.is_active == True
+#         )
+#     )
+#     for token in result_all.scalars().all():
+#         token.is_active = False
+#         db.add(token)
+#     await db.commit()
 
 
 async def validate_refresh_token(db: AsyncSession, uuid: str, refresh_token: str) -> bool:

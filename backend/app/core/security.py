@@ -1,12 +1,26 @@
 import re
 import secrets
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-from uuid import uuid4
+from datetime import datetime, timezone
 
 import bcrypt
 import jwt
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class AccessTokenResponse(BaseModel):
+    token : str = Field(..., description="JWT 액세스 토큰")
+    expires_in : int = Field(..., description="토큰 만료까지 남은 시간(초)")
+    expires_at : int = Field(..., description="토큰 만료 시간(Unix timestamp)")
+
+
+class RefreshTokenResponse(BaseModel):
+    token: str = Field(..., description="리프래시 토큰")
+    create_at: int = Field(..., description="토큰 생성 시간(Unix timestamp)")
+    expires_in: int = Field(..., description="토큰 만료까지 남은 시간(초)")
+    expires_at: int = Field(..., description="토큰 만료 시간(Unix timestamp)")
+    uuid: Optional[str] = Field(..., description="토큰 소유자 UUID (DB 저장용)")
 
 
 class PasswordManager:
@@ -95,12 +109,12 @@ class JWTManager:
         pass
 
     @staticmethod
-    async def _secret_key_rotation() -> None:
+    def _secret_key_rotation() -> None:
         pass
 
 
     @classmethod
-    async def create_token(cls, uuid: str) -> tuple[str, int, int]:
+    def create_token(cls, uuid: str) -> AccessTokenResponse:
         """JWT 토큰 생성"""
 
         sub = str(uuid)
@@ -114,10 +128,14 @@ class JWTManager:
         }
 
         encoded_jwt = jwt.encode(payload, cls.SECRET_KEY, algorithm=cls.ALGORITHM)
-        return encoded_jwt, exp, iat
+        return AccessTokenResponse(
+            token = encoded_jwt,
+            expires_in = exp,
+            expires_at = iat
+            )
 
     @classmethod
-    async def verify_token(cls, token: str) -> dict:
+    def verify_token(cls, token: str) -> dict:
         """JWT 토큰 검증 및 payload 반환. 실패 시 예외 발생"""
         try:
             payload = jwt.decode(token, cls.SECRET_KEY, algorithms=[cls.ALGORITHM])
@@ -141,22 +159,28 @@ class RefreshTokenManager:
     @staticmethod
     def get_expiration_datetime() -> datetime:
         create_at = round(datetime.now(timezone.utc).timestamp())
-        max_age = RefreshTokenManager.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-        expires_at = create_at + max_age
-        return create_at, expires_at, max_age
+        expires_in = RefreshTokenManager.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        expires_at = create_at + expires_in
+        return create_at, expires_at, expires_in
 
     @classmethod
-    async def create_token(cls) -> tuple[str, int, int, int]:
+    def create_token(cls, user_uuid: str = None) -> RefreshTokenResponse:
         """CSPRNG 기반 리프래시 토큰 생성"""
-        create_at, expires_at, max_age = cls.get_expiration_datetime()
+        create_at, expires_at, expires_in = cls.get_expiration_datetime()
         token = secrets.token_urlsafe(cls.TOKEN_BYTE_LENGTH)
         if cls.STORE_HASHED_REFRESH_TOKENS:
             hash_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
             return hash_token
-        return token, create_at, expires_at, max_age
-    
+        return RefreshTokenResponse(
+            token=token,
+            create_at=create_at,
+            expires_at=expires_at,
+            expires_in=expires_in,
+            uuid=user_uuid
+        )
+
     @classmethod
-    async def verify_token(cls, token: str, stored_token: str) -> bool:
+    def verify_token(cls, token: str, stored_token: str) -> bool:
         """리프래시 토큰 검증"""
         if cls.STORE_HASHED_REFRESH_TOKENS:
             hash_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
