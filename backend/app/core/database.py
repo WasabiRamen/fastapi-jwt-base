@@ -1,4 +1,3 @@
-import dotenv
 import os
 from typing import AsyncGenerator, Optional
 
@@ -8,14 +7,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 
+from app.core.settings import database_setting as db_settings
 
-dotenv.load_dotenv()
-
-user = os.getenv("POSTGRES_USER")
-password = os.getenv("POSTGRES_PASSWORD")
-host = 'localhost' if os.getenv("LOCAL") else os.getenv("POSTGRES_HOST")
-port = os.getenv("POSTGRES_PORT", "5432")
-db = os.getenv("POSTGRES_DB")
+user = db_settings.DB_USER
+password = db_settings.DB_PASSWORD
+host = db_settings.DB_HOST
+port = db_settings.DB_PORT
+db = db_settings.DB_NAME
 
 # 비동기용 데이터베이스 URL로 변경
 database_url = (
