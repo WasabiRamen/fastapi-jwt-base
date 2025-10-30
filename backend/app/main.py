@@ -45,7 +45,6 @@ app.add_middleware(
 )
 
 
-
 @app.get("/")
 def read_root():
     """헬스체크 엔드포인트"""

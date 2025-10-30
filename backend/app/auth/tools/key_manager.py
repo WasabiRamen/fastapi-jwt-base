@@ -2,6 +2,7 @@ import os
 import secrets
 import json
 import asyncio
+from loguru import logger
 
 from datetime import datetime, timezone
 from pydantic import Field, BaseModel
@@ -94,4 +95,4 @@ class JWTSecretKeyManager:
         self.scheduler.add_job(self.rotate_key, "date", run_date=run_date)
         if not self.scheduler.running:
             self.scheduler.start()
-        print(f"다음 키 회전 예약: {run_date}")
+    logger.info(f"다음 키 회전 예약: {run_date}")
