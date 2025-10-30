@@ -21,46 +21,18 @@ class DatabaseSettings(BaseSettings):
 database_setting = DatabaseSettings()
 
 
-# class appSettings(BaseSettings):
-#     """애플리케이션 전반 설정"""
+class appSettings(BaseSettings):
+    """애플리케이션 전반 설정"""
 
-#     APP_NAME: str = Field("FastAPI JWT Example", description="애플리케이션 이름")
-#     APP_VERSION: str = Field("0.0.0", description="애플리케이션 버전")
-#     DEBUG: bool = Field(False, description="디버그 모드 활성화 여부")
-#     CORS_ORIGINS: list[str] = Field([], description="허용된 CORS 출처 목록")
+    APP_NAME: str = Field("HiLi FastAPI OAuth2.0 Boilerplate", description="애플리케이션 이름")
+    APP_VERSION: str = Field("0.0.0", description="애플리케이션 버전")  # 미완성이라 0.0.0
+    CORS_ORIGINS: str = Field("", description="허용된 CORS 출처 목록 (콤마로 구분된 문자열)")
+    CORS_ALLOW_CREDENTIALS: bool = Field(True, description="CORS credentials 허용 여부")
+    LOG_LEVEL: str = Field("INFO", description="로그 레벨")
+    LOG_FILE_PATH: str = Field("logs/app.log", description="로그 파일 경로")
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / "config" / ".env.app",
+        env_file_encoding="utf-8"
+    )
 
-
-# class RedisSettings(BaseSettings):
-#     """Redis 설정"""
-
-#     REDIS_HOST: str = Field("localhost", description="Redis 호스트")
-#     REDIS_PORT: int = Field(6379, description="Redis 포트")
-#     REDIS_DB: int = Field(0, description="Redis 데이터베이스 번호")
-
-
-# # --------------------------------------------------------------
-# class AccessTokenSecretSettings(BaseSettings):
-#     SECRET_KEY_PATH: str = Field(
-#         os.path.join(os.path.dirname(os.path.dirname(__file__)), "secrets", "secret.key"),
-#         description='액세스 토큰 비밀 키 파일 경로'
-#     )
-#     SECRET_KEY_ROTATION_DAYS: int = Field(30, description="액세스 토큰 비밀 키 교체 주기 (일)")
-
-
-# class AccessTokenSettings(BaseSettings):
-#     """Access Token Settings (Json Web Token)"""
-#     EXPIRES_IN_SECONDS: int = Field(60 * 15, description="액세스 토큰 만료 시간 (초)")
-
-# class RefreshTokenSettings(BaseSettings):
-#     """Refresh Token Settings (Json Web Token)"""
-
-#     EXPIRES_IN_SECONDS: int = Field(60 * 60 * 24 * 7, description="리프레시 토큰 만료 시간 (초)")
-
-# # --------------------------------------------------------------
-
-# class CookieSettings(BaseSettings):
-#     """쿠키 설정"""
-
-#     SECURE: bool = Field(True, description="보안 쿠키 사용 여부")
-#     HTTP_ONLY: bool = Field(True, description="HTTP 전용 쿠키 사용 여부")
-#     SAME_SITE: str = Field("Lax", description="SameSite 속성 설정")
+app_settings = appSettings()
