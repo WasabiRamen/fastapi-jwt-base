@@ -1,0 +1,29 @@
+.main-gnb{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 24px;
+  background:#fff;
+  border-bottom:1px solid #eee;
+}
+
+.main-left{
+  font-weight:700;
+  font-size:1.25rem;
+  color:#A47764;
+}
+
+.login-btn{
+  display:inline-block;
+  padding:8px 16px;
+  border-radius:6px;
+  color:#A47764;
+  border:2px solid #A47764;
+  text-decoration:none;
+  font-weight:600;
+}
+
+.login-btn:hover{
+  background:#A47764;
+  color:#fff;
+}
