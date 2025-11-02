@@ -1,3 +1,5 @@
+from fastapi import Request
+
 import app.accounts.crud as crud
 import app.auth.core.security as security
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.accounts.exceptions import (
     UserAlreadyExistsException, 
     )
+
+from app.auth.exceptions import (
+    InvalidTokenException
+)
 
 from app.auth.exceptions import InvalidPasswordException
 
@@ -27,3 +33,13 @@ async def create_user(db: AsyncSession, user_id: str, password: str) -> bool:
         raise InvalidPasswordException()
 
     return await crud.create_user(db, user_id, password)
+
+
+async def me(request: Request):
+    token = request.cookies.get("access_token")
+    try:
+        user_uuid = security.JWTManager.verify_token(token, request.app)
+    except ValueError:
+        raise InvalidTokenException("유효하지 않은 액세스 토큰입니다.")
+
+    return user_uuid

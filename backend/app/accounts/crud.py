@@ -16,3 +16,8 @@ async def get_user_by_user_id(db: AsyncSession, user_id: str):
     """ID로 사용자 조회"""
     result = await db.execute(select(User).where(User.user_id == user_id))
     return result.scalars().first()
+
+async def get_user_by_user_uuid(db: AsyncSession, user_uuid: str):
+    """UUID로 사용자 조회"""
+    result = await db.execute(select(User).where(User.user_uuid == user_uuid))
+    return result.scalars().first()
