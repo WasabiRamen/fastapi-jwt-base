@@ -64,20 +64,21 @@ export default function Login(){
         <div className="input-group">
           <label>아이디</label>
           <div className="input-wrap">
-            <span className="input-icon">@</span>
             <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="아이디를 입력하세요" />
           </div>
         </div>
 
         <div className="input-group">
-          <label>비밀번호</label>
-          <div className="input-wrap">
-            <span className="input-icon">🔒</span>
-            <input 
-            type="password" 
-            value={password} 
-            onChange={e=>setPassword(e.target.value)} 
-            placeholder="비밀번호" />
+        <label>비밀번호</label>
+          <div className="input-row">
+            <div className="input-wrap">
+              <input
+                type="password"
+                value={password}
+                onChange={e=>setPassword(e.target.value)}
+                placeholder="비밀번호"
+              />
+            </div>
           </div>
         </div>
 

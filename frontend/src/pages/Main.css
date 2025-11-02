@@ -61,3 +61,51 @@
 .feature-card{ background:#fff; padding:18px; border-radius:10px; border:1px solid #f0f3f5 }
 .feature-card h3{ margin:0 0 6px }
 .site-footer{ text-align:center; color:#94a3b8; margin-top:22px }
+
+/* --- Launch page / military clock styles --- */
+.launch-wrap{ min-height:80vh; display:flex; align-items:center; justify-content:center; padding:40px 16px; background:linear-gradient(180deg,#f7fbfc,#ffffff); }
+.launch-inner{ width:100%; max-width:980px; }
+.launch-progress{ background:#ffffff; border:1px solid rgba(2,18,20,0.06); padding:22px; border-radius:12px; box-shadow:0 14px 40px rgba(2,18,20,0.08); margin-bottom:20px }
+.launch-title{ margin:0 0 12px; text-align:center; font-size:1.25rem; color:#062a36 }
+.progress-bar{ height:22px; background:#eef6f8; border-radius:12px; overflow:hidden; position:relative }
+.progress-fill{ height:100%; background:linear-gradient(90deg,#00a0c6,#006b8a); width:0%; transition:width 0.12s linear }
+.progress-info{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-family:monospace; color:#0b3b48 }
+.percent{ font-weight:700 }
+.dates{ color:#7b8b92; font-size:0.9rem }
+
+/* Logout confirmation modal */
+.modal-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; /* subtle gray overlay to dim background */ background:rgba(128,128,128,0.22); z-index:9999; backdrop-filter: blur(2px); }
+.modal-box{ background:#fff; padding:20px 22px; border-radius:12px; box-shadow:0 10px 30px rgba(2,18,20,0.25); width:320px; max-width:90%; text-align:center }
+.modal-box{ z-index:10000 }
+.modal-box h3{ margin:0 0 8px; font-size:1.05rem; color:#062a36 }
+.modal-box p{ margin:0 0 14px; color:#475569 }
+.modal-actions{ display:flex; gap:10px; justify-content:center }
+.btn-cancel{ background:#f3f4f6; border:1px solid #e6eef2; padding:8px 12px; border-radius:8px; cursor:pointer }
+.btn-confirm{ background:#ff4d4f; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
+
+.mil-clock{ background:#ffffff; border:1px solid rgba(2,18,20,0.06); padding:22px; border-radius:12px; box-shadow:0 14px 40px rgba(2,18,20,0.08) }
+.clock-title{ margin:0 0 14px; text-align:center; font-size:1.1rem; color:#062a36 }
+.clock-and-readout{ display:flex; gap:18px; align-items:center; justify-content:center; flex-wrap:wrap }
+.clock{ width:240px; height:240px; display:flex; align-items:center; justify-content:center }
+.clock-face{ width:210px; height:210px; border-radius:50%; background:radial-gradient(circle at 30% 20%, #ffffff, #f3fbfc 40%); border:6px solid #e6f2f5; position:relative; box-shadow:inset 0 4px 12px rgba(0,0,0,0.03); --clock-radius:105px; --clock-center-offset:4px }
+.hand{ position:absolute; left:50%; top:50%; transform-origin:50% 100%; background:#002b35 }
+.hand.hour{ width:6px; height:52px; border-radius:6px; margin-left:-3px; margin-top:-52px; background:#024248 }
+.hand.minute{ width:4px; height:72px; border-radius:4px; margin-left:-2px; margin-top:-72px; background:#00707e }
+.hand.second{ width:2px; height:86px; border-radius:2px; margin-left:-1px; margin-top:-86px; background:#ff3b30 }
+.tick{ position:absolute; left:50%; top:50%; width:0; height:0; pointer-events:none }
+.tick-line{ position:absolute; left:50%; top:calc(50% - var(--clock-radius) + var(--clock-center-offset)); transform:translateX(-50%); width:2px; height:12px; background:rgba(6,42,54,0.12); border-radius:2px }
+
+.clock-readout{ min-width:200px; font-family:monospace; color:#09323b }
+.digital{ font-size:1.6rem; font-weight:700; }
+.fraction{ margin-top:6px; color:#3d6d75 }
+
+@media (max-width:640px){
+  .clock{ width:180px; height:180px }
+  .clock-face{ width:160px; height:160px; --clock-radius:80px; --clock-center-offset:8px }
+  .hand.hour{ height:42px; margin-top:-42px }
+  .hand.minute{ height:58px; margin-top:-58px }
+  .hand.second{ height:70px; margin-top:-70px }
+}
+
+
+
