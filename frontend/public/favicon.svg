@@ -1,0 +1,6 @@
+<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+  <!-- 바텀 레이어: 형광 파랑 그림자, 오프셋 추가 -->
+  <text x="22" y="72" font-family="Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#00FFFF" opacity="0.6" transform="skewX(-15)"> H </text>
+  <!-- 탑 레이어: 검정색 글자 -->
+  <text x="20" y="70" font-family="Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#111111" transform="skewX(-15)"> H </text>
+</svg>
