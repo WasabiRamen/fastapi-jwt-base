@@ -15,6 +15,16 @@ from pydantic import BaseModel, Field
 #         description="사용자 비밀번호 (8~16자, 대문자/숫자/특수문자 포함)"
 #         )
 
+class SendEmailRequest(BaseModel):
+    """이메일 인증 요청 스키마"""
+    email: str = Field(..., description="이메일 주소")
+
+
+class VerifyEmailRequest(BaseModel):
+    """이메일 인증 코드 검증 요청 스키마"""
+    token: str = Field(..., description="이메일 인증 토큰")
+    code: str = Field(..., description="이메일 인증 코드")
+
 
 # ----------------------------------------------------------------
 

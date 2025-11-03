@@ -4,7 +4,7 @@ from fastapi.requests import Request
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.auth import service
+from app.auth import service, schemas
 
 from loguru import logger
 
@@ -49,21 +49,20 @@ async def logout(
 @router.post("/email")
 async def send_email_verification(
     request: Request,
-    email: str,
+    form: schemas.SendEmailRequest,
 ):
     """이메일 인증 토큰 및 코드 발급"""
-    result = await service.send_email_verification(request, email)
-    logger.info(f"Email verification sent to '{email}'.")
+    result = await service.send_email_verification(request, form.email)
+    logger.info(f"Email verification sent to '{form.email}'.")
     return result
 
 
 @router.post("/email/verify")
 async def verify_email_code(
     request: Request,
-    token: str,
-    code: str,
+    form: schemas.VerifyEmailRequest,
 ):
     """이메일 인증 코드 검증"""
-    result = await service.verify_email_token(request, token, code)
-    logger.info(f"Email verification token checked for token '{token}'.")
+    result = await service.verify_email_token(request, form.token, form.code)
+    logger.info(f"Email verification token checked for token '{form.token}'.")
     return result
