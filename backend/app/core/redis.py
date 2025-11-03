@@ -3,17 +3,17 @@ from typing import Optional
 
 from fastapi import Request
 from redis.asyncio import Redis
+from loguru import logger
 
-DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+from app.core.settings import redis_settings
 
-def get_redis_url() -> str:
-    return os.getenv("REDIS_URL", DEFAULT_REDIS_URL)
+DEFAULT_REDIS_URL = f"redis://{redis_settings.REDIS_HOST}:{redis_settings.REDIS_PORT}/{redis_settings.REDIS_DB}"
 
 async def init_redis(app) -> None:
     """
     Lifespan에서 호출: Redis 클라이언트를 1회 생성하여 app.state에 저장
     """
-    url = get_redis_url()
+    url = DEFAULT_REDIS_URL
     redis = Redis.from_url(
         url,
         encoding="utf-8",
@@ -23,6 +23,7 @@ async def init_redis(app) -> None:
     # 연결 확인(옵션)
     await redis.ping()
 
+    logger.info(f"Redis Successfully connected : {redis_settings.REDIS_HOST}")
     app.state.redis = redis
 
 async def close_redis(app) -> None:

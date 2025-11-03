@@ -8,7 +8,7 @@ import jwt
 from fastapi import FastAPI
 
 from app.auth.setting import setting
-from app.auth.schemas import AccessTokenResponse, RefreshTokenResponse
+from app.auth.schemas import AccessTokenResponse, RefreshTokenResponse, EmailVerifyResponse
 
 password_regex = r"^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,16}$"
 
@@ -158,8 +158,39 @@ class RefreshTokenManager:
         return token == stored_token
 
 
+class EmailTokenManager:
+    """
+    이메일 인증 토큰 관리 유틸리티
 
-# # 리펙토링 예정
-# # 최대한 많은 로직을 여기다가 박아두기
+    토큰 형식 -> CSPRNG 기반 16바이트 랜덤 문자열
+    """
+    EMAIL_TOKEN_BYTE_LENGTH = setting.EMAIL_VERIFY_CODE_LENGTH
+    EMAIL_TOKEN_EXPIRE_MINUTES = setting.EMAIL_VERIFY_TOKEN_EXPIRE_MINUTES  # 이메일 토큰 만료 기간 (분)
+
+    @staticmethod
+    def get_expiration_datetime() -> datetime:
+        create_at = round(datetime.now(timezone.utc).timestamp())
+        expires_in = EmailTokenManager.EMAIL_TOKEN_EXPIRE_MINUTES * 60
+        expires_at = create_at + expires_in
+        return create_at, expires_at, expires_in
+
+    @classmethod
+    def generate_6digit_code(cls) -> str:
+        return f"{secrets.randbelow(1000000):06d}"
+
+    @classmethod
+    def create_token(cls, email: str) -> EmailVerifyResponse:
+        """CSPRNG 기반 이메일 인증 토큰 생성"""
+        create_at, expires_at, expires_in = cls.get_expiration_datetime()
+        token = secrets.token_urlsafe(cls.EMAIL_TOKEN_BYTE_LENGTH)
+        code = cls.generate_6digit_code()
+        return EmailVerifyResponse(
+            email=email,
+            token=token,
+            code=code,
+            created_at=create_at,
+            expires_at=expires_at,
+            expires_in=expires_in
+        )
 
 

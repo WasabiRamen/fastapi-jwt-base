@@ -23,6 +23,10 @@ class AuthSettings(BaseSettings):
     TOKEN_COOKIE_SAMESITE: str = Field("lax", description="토큰 쿠키의 SameSite 속성 설정")
     TOKEN_COOKIE_PATH: str = Field("/", description="토큰 쿠키의 경로 설정")
 
+    # Email Verification Settings
+    EMAIL_VERIFY_TOKEN_EXPIRE_MINUTES: int = Field(10, description="이메일 인증 토큰 만료 시간 (분)")
+    EMAIL_VERIFY_CODE_LENGTH: int = Field(16, description="이메일 인증 코드 길이")
+
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / "config" / ".env.auth",
         env_file_encoding="utf-8"

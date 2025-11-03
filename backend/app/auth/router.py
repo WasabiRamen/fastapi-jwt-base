@@ -44,3 +44,26 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     return await service.logout(request, db)
+
+
+@router.post("/email")
+async def send_email_verification(
+    request: Request,
+    email: str,
+):
+    """이메일 인증 토큰 및 코드 발급"""
+    result = await service.send_email_verification(request, email)
+    logger.info(f"Email verification sent to '{email}'.")
+    return result
+
+
+@router.post("/email/verify")
+async def verify_email_code(
+    request: Request,
+    token: str,
+    code: str,
+):
+    """이메일 인증 코드 검증"""
+    result = await service.verify_email_token(request, token, code)
+    logger.info(f"Email verification token checked for token '{token}'.")
+    return result

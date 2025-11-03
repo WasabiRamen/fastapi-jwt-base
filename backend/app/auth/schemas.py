@@ -31,3 +31,12 @@ class RefreshTokenResponse(BaseModel):
     expires_in: int = Field(..., description="토큰 만료까지 남은 시간(초)")
     expires_at: int = Field(..., description="토큰 만료 시간(Unix timestamp)")
     user_uuid: str = Field(..., description="토큰 소유자 UUID (DB 저장용)")
+
+
+class EmailVerifyResponse(BaseModel):
+    email: str = Field(..., description="이메일 주소")
+    token: str = Field(..., description="이메일 인증 토큰")
+    code: str = Field(..., description="이메일 인증 코드")
+    expires_at: int = Field(..., description="토큰 만료 시간(Unix timestamp)")
+    created_at: int = Field(..., description="토큰 생성 시간(Unix timestamp)")
+    expires_in: int = Field(..., description="토큰 만료까지 남은 시간(초)")

@@ -20,6 +20,20 @@ class DatabaseSettings(BaseSettings):
 
 database_setting = DatabaseSettings()
 
+class RedisSettings(BaseSettings):
+    """Redis 설정"""
+
+    REDIS_HOST: str = Field("localhost", description="Redis 호스트")
+    REDIS_PORT: int = Field(6379, description="Redis 포트")
+    REDIS_DB: int = Field(0, description="Redis 데이터베이스 번호")
+    REDIS_PASSWORD: str = Field("", description="Redis 비밀번호 (없으면 빈 문자열)")
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / "config" / ".env.redis",
+        env_file_encoding="utf-8"
+    )
+redis_settings = RedisSettings()
+
 
 class appSettings(BaseSettings):
     """애플리케이션 전반 설정"""
@@ -36,3 +50,18 @@ class appSettings(BaseSettings):
     )
 
 app_settings = appSettings()
+
+
+class smtpSettings(BaseSettings):
+    """SMTP 설정"""
+
+    SMTP_HOST: str = Field("smtp.gmail.com", description="SMTP 호스트")
+    SMTP_PORT: int = Field(587, description="SMTP 포트")
+    SMTP_USER: str = Field(..., description="SMTP 사용자 이름")
+    SMTP_PASSWORD: str = Field(..., description="SMTP 비밀번호")
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / "config" / ".env.smtp",
+        env_file_encoding="utf-8"
+    )
+smtp_settings = smtpSettings()

@@ -3,21 +3,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.settings import app_settings
+from app.core.settings import smtp_settings
+from app.auth.tools.async_mailer import AsyncEmailSender
 from app.api.v1 import router as v1_router
 from app.core.database import init_db, close_db
-# from app.core.redis import init_redis, close_redis
+from app.core.redis import init_redis, close_redis
 
 from app.auth.tools.key_manager import JWTSecretKeyManager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: 전역 리소스 준비
-    await init_db(app)
-    # await init_redis(app)
+    # JWT Key Manager
     manager = JWTSecretKeyManager()
     await manager.init()
     app.state.jwt_manager = manager
+
+    # DB
+    await init_db(app)
+
+    # Redis
+    await init_redis(app)
+
+    # SMTP
+    app.state.smtp = AsyncEmailSender(
+        smtp_host=smtp_settings.SMTP_HOST,
+        smtp_port=smtp_settings.SMTP_PORT,
+        username=smtp_settings.SMTP_USER,
+        password=smtp_settings.SMTP_PASSWORD,
+        from_email=smtp_settings.SMTP_USER,
+        use_tls=True
+    )
+    await app.state.smtp.connect()
 
     try:
         yield
@@ -25,7 +42,8 @@ async def lifespan(app: FastAPI):
         manager.scheduler.shutdown(wait=False)
         # Shutdown: 전역 리소스 정리
         await close_db(app)
-        # await close_redis(app)
+        await close_redis(app)
+        await app.state.smtp.disconnect()
 
 
 app = FastAPI(

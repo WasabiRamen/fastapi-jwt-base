@@ -1,4 +1,6 @@
-from fastapi import Request
+import json
+
+from fastapi import Request, FastAPI
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 
@@ -15,6 +17,7 @@ from app.auth.exceptions import (
     )
 from app.auth import crud
 from app.accounts import crud as account_crud
+from app.auth.tools import async_mailer
 
 
 def _get_client_ip(request: Request) -> str:
@@ -137,3 +140,70 @@ async def logout(
     resp = JSONResponse({"message": "로그아웃 되었습니다."})
     resp = TokenCookieManager.delete_token_cookies(response=resp)
     return resp
+
+
+async def send_email_verification(
+    request: Request,
+    email: str,
+):
+    """
+    이메일 인증 토큰 및 코드 발급
+    """
+    verify = security.EmailTokenManager.create_token(email)
+    
+    body = async_mailer.varification_email_form(
+        code=verify.code,
+        expiry=verify.expires_in // 60
+    )
+
+    await request.app.state.smtp.send_email(
+        to=email,
+        subject="이메일 인증 안내 — Hilighting",
+        body=body,
+        subtype="html"
+    )
+
+    redis_value = {
+            "email": email,
+            "code": verify.code,
+            "expires_at": verify.expires_at,
+            "created_at": verify.created_at
+        }
+
+    await request.app.state.redis.set(
+        verify.token, 
+        json.dumps(redis_value), 
+        ex=verify.expires_in
+        )
+
+    response_data = {
+        "email": email,
+        "token": verify.token,
+        "expires_at": verify.expires_at,
+        "created_at": verify.created_at
+    }
+
+    return JSONResponse(response_data)
+
+
+async def verify_email_token(
+    request: Request,
+    token: str,
+    code: str,
+):
+    """
+    이메일 인증 토큰 및 코드 검증
+    """
+    redis_data = await request.app.state.redis.get(token)
+    if not redis_data:
+        raise InvalidTokenException("이메일 인증 토큰이 유효하지 않거나 만료되었습니다.")
+
+    data = json.loads(redis_data)
+
+    if data.get("code") != code:
+        raise InvalidTokenException("이메일 인증 코드가 일치하지 않습니다.")
+
+    # 검증 성공 시, Redis에서 해당 토큰 삭제
+    await request.app.state.redis.delete(token)
+
+    return JSONResponse({"message": "이메일 인증이 완료되었습니다."})

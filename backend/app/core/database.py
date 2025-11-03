@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 
 from app.core.settings import database_setting as db_settings
+from loguru import logger
 
 user = db_settings.DB_USER
 password = db_settings.DB_PASSWORD
@@ -44,6 +45,8 @@ async def init_db(app) -> None:
     # 필요 시 여기서 스키마 생성 등 초기화
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    logger.info(f"DB Successfully connected : {host}")
 
 async def close_db(app) -> None:
     """
