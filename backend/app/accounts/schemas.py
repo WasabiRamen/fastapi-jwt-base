@@ -10,6 +10,8 @@ class CreateUser(BaseModel):
 
     user_id: str = Field(..., description="아이디")
     password: str = Field(..., description="사용자 비밀번호 (8~16자, 대문자/숫자/특수문자 포함)")
+    email: str = Field(..., description="이메일 주소")
+    token: str | None = Field(None, description="이메일 인증 토큰")
 
     @field_validator('password')
     def password_policy(cls, v):

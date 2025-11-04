@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import User
-from app.auth.models import RefreshToken
+from app.auth.models import RefreshToken, EmailVerificationCode
 
 from app.auth.core import security
 from app.auth.schemas import RefreshTokenResponse
@@ -128,3 +128,79 @@ async def deactivate_refresh_token(db: AsyncSession, refresh_token: str) -> None
     db_token.is_active = False
     db.add(db_token)
     await db.commit()
+
+
+async def save_email_verification_code(
+        db: AsyncSession,
+        email: str,
+        token: str,
+        code: str,
+        expires_at: int
+    ) -> None:
+    """이메일 인증 코드 저장"""
+    db_code = EmailVerificationCode(
+        token=token,
+        code=code,
+        email=email,
+        expires_at=ts_to_dt(expires_at)
+    )
+    db.add(db_code)
+    await db.commit()
+
+
+async def update_email_verification_code_as_verified(db: AsyncSession, token: str) -> None:
+    """이메일 인증 코드 검증 처리"""
+    result = await db.execute(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.token == token,
+            EmailVerificationCode.is_used == False,
+            EmailVerificationCode.is_verified == False
+        )
+    )
+    db_code = result.scalars().first()
+    if not db_code:
+        return
+
+    db_code.is_used = True
+    db_code.is_verified = True
+    db.add(db_code)
+    await db.commit()
+
+
+async def update_email_verification_code_as_used(db: AsyncSession, token: str) -> None:
+    """이메일 인증 코드 사용 처리"""
+    result = await db.execute(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.token == token,
+        )
+    )
+    db_code = result.scalars().first()
+    if not db_code:
+        return
+
+    db_code.is_used = True
+    db.add(db_code)
+    await db.commit()
+
+
+async def email_verified(db: AsyncSession, token: str) -> bool:
+    """이메일이 인증되었는지 확인"""
+    result = await db.execute(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.token == token,
+            EmailVerificationCode.is_verified == True
+        )
+    )
+    code = result.scalars().first()
+    return code is not None
+
+
+async def existing_email_token(db: AsyncSession, token: str) -> bool:
+    """이메일 인증 토큰 존재 여부 확인"""
+    result = await db.execute(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.token == token,
+        )
+    )
+    code = result.scalars().first()
+    return code is not None

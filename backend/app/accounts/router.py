@@ -22,7 +22,17 @@ async def create_user(
     db: AsyncSession = Depends(get_db)
 ):
     """사용자 생성"""
-    return service.create_user(db, user.user_id, user.password)
+    return await service.create_user(db, user.user_id, user.password, user.email, user.token)
+
+
+@router.get("/exists/{user_id}")
+async def check_existing_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """사용자 아이디 중복 검사"""
+    exists = await service.existing_user(db, user_id)
+    return {"exists": exists}
 
 
 @router.get("/me")

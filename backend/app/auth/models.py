@@ -32,3 +32,17 @@ class OAuthAccount(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class EmailVerificationCode(Base):
+    """이메일 인증 코드 모델"""
+
+    __tablename__ = 'email_verification_codes'
+
+    token = Column(String, nullable=False, primary_key=True)
+    code = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_used = Column(Boolean, default=False)
+    is_verified = Column(Boolean, default=False)
