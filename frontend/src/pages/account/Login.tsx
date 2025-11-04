@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './Auth.css';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
@@ -7,6 +7,14 @@ interface LoginResponse {
   access_token: string;
   token_type: string;
 }
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+const GOOGLE_CLIENT_ID = '1008734949255-c3efrof5a6tri4kh08tens0ckssfohqj.apps.googleusercontent.com';
 
 // Send credentials as application/x-www-form-urlencoded because the backend
 // uses OAuth2PasswordRequestForm (FastAPI). Axios instance (`api`) has
@@ -27,8 +35,24 @@ export default function Login(){
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  const googleClient = useRef<any>(null);
+  const [isGoogleReady, setIsGoogleReady] = useState(false);
 
   const onSocial = (provider: string) => {
+    if (provider === 'google') {
+      if (!googleClient.current) {
+        console.warn('Google OAuth 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      try {
+        googleClient.current.requestAccessToken({ prompt: isGoogleReady ? undefined : 'consent' });
+      } catch (err) {
+        console.error('Google OAuth 요청 중 오류가 발생했습니다.', err);
+      }
+      return;
+    }
+
     // TODO: 연결된 OAuth 엔드포인트로 이동시키거나 팝업 열기
     // 예: window.location.href = `${process.env.REACT_APP_API_BASE_URL}/auth/oauth/${provider}`
     console.log(`social login: ${provider}`);
@@ -36,6 +60,50 @@ export default function Login(){
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const initializeGoogleOAuth = () => {
+      if (!window.google?.accounts?.oauth2) {
+        console.warn('Google OAuth 클라이언트를 찾을 수 없습니다.');
+        return;
+      }
+
+      googleClient.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'openid profile email',
+        prompt: 'consent',
+        callback: (tokenResponse: { access_token: string; expires_in: number; token_type: string; scope: string }) => {
+          console.log('Google OAuth Token Response:', tokenResponse);
+        },
+        error_callback: (err: unknown) => {
+          console.error('Google OAuth 에러:', err);
+        }
+      });
+
+      setIsGoogleReady(true);
+    };
+
+    if (window.google?.accounts?.oauth2) {
+      initializeGoogleOAuth();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleOAuth;
+    script.onerror = () => {
+      console.error('Google OAuth 스크립트 로드에 실패했습니다.');
+    };
+    document.head.appendChild(script);
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,15 +164,7 @@ export default function Login(){
       <div className="social-login">
         <button type="button" className="social-btn google" aria-label="구글 로그인" onClick={()=>onSocial('google')}>
           <span className="icon">G</span>
-          <span className="label">구글로 계속하기</span>
-        </button>
-        <button type="button" className="social-btn kakao" aria-label="카카오 로그인" onClick={()=>onSocial('kakao')}>
-          <span className="icon">K</span>
-          <span className="label">카카오로 계속하기</span>
-        </button>
-        <button type="button" className="social-btn naver" aria-label="네이버 로그인" onClick={()=>onSocial('naver')}>
-          <span className="icon">N</span>
-          <span className="label">네이버로 계속하기</span>
+          <span className="label">Google로 로그인</span>
         </button>
       </div>
     </div>
