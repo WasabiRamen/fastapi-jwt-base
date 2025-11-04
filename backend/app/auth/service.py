@@ -143,6 +143,7 @@ async def logout(
 
 
 async def send_email_verification(
+    db: AsyncSession,
     request: Request,
     email: str,
 ):
@@ -176,6 +177,14 @@ async def send_email_verification(
         ex=verify.expires_in
         )
 
+    await crud.save_email_verification_code(
+        db=db,
+        email=email,
+        token=verify.token,
+        code=verify.code,
+        expires_at=verify.expires_at
+    )
+
     response_data = {
         "email": email,
         "token": verify.token,
@@ -187,6 +196,7 @@ async def send_email_verification(
 
 
 async def verify_email_token(
+    db: AsyncSession,
     request: Request,
     token: str,
     code: str,
@@ -205,5 +215,6 @@ async def verify_email_token(
 
     # 검증 성공 시, Redis에서 해당 토큰 삭제
     await request.app.state.redis.delete(token)
+    await crud.update_email_verification_code_as_verified(db, token)
 
     return JSONResponse({"message": "이메일 인증이 완료되었습니다."})
