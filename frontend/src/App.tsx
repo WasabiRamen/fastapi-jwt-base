@@ -5,6 +5,7 @@ import Login from './pages/account/Login';
 import Register from './pages/account/Register';
 import FindId from './pages/account/FindId';
 import PasswordReset from './pages/account/PasswordReset';
+import Profile from './pages/account/Profile';
 import './App.css';
 
 function App(): React.ReactElement {
@@ -16,6 +17,7 @@ function App(): React.ReactElement {
         <Route path="/account/register" element={<Register />} />
         <Route path="/account/find-id" element={<FindId />} />
         <Route path="/account/password-reset" element={<PasswordReset />} />
+        <Route path="/account/profile" element={<Profile />} />
       </Routes>
     </Router>
   );

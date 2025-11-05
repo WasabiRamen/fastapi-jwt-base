@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Main.css';
 import logo from '../logo.svg';
+import defaultUser from '../default_user.svg';
 import api from '../lib/api';
 import LaunchClock from '../components/LaunchClock';
 
@@ -73,6 +74,21 @@ export default function Main() {
     await handleLogout();
   };
 
+  const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
+  const avatarRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!showUserMenu) return;
+      const target = e.target as Node;
+      if (avatarRef.current && !avatarRef.current.contains(target)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [showUserMenu]);
+
   
 
   return (
@@ -86,7 +102,19 @@ export default function Main() {
             <span className="login-btn">...</span>
           ) : isLoggedIn ? (
             <>
-              <button type="button" className="login-btn" onClick={() => setShowLogoutModal(true)}>로그아웃</button>
+              <div className="avatar-wrap" ref={avatarRef}>
+                <img src={defaultUser} alt="user" className="user-avatar" onClick={() => setShowUserMenu(s => !s)} />
+                {showUserMenu && (
+                  <div className="user-menu" role="menu" aria-label="사용자 메뉴">
+                    <button className="user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); navigate('/account/profile'); }}>
+                      내 프로필
+                    </button>
+                    <button className="user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); setShowLogoutModal(true); }}>
+                      로그아웃
+                    </button>
+                  </div>
+                )}
+              </div>
               {showLogoutModal && (
                 <div className="modal-overlay" role="dialog" aria-modal="true">
                   <div className="modal-box">

@@ -32,6 +32,15 @@
   font-weight:600;
 }
 
+.user-avatar{
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  object-fit:cover;
+  margin-right:12px;
+  border:1px solid rgba(0,0,0,0.06);
+}
+
 .login-btn:hover{
   background:#004766;
   color:#fff;
@@ -69,6 +78,48 @@
 .launch-title{ margin:0 0 12px; text-align:center; font-size:1.25rem; color:#062a36 }
 .progress-bar{ height:22px; background:#eef6f8; border-radius:12px; overflow:hidden; position:relative }
 .progress-fill{ height:100%; background:linear-gradient(90deg,#00a0c6,#006b8a); width:0%; transition:width 0.12s linear }
+
+/* Header positioning for user menu */
+.main-right{ position:relative }
+
+.user-avatar{
+  width:36px;
+  height:36px;
+  border-radius:50%;
+  object-fit:cover;
+  margin-right:12px;
+  border:1px solid rgba(0,0,0,0.06);
+}
+
+.avatar-wrap{ display:inline-flex; align-items:center; position:relative }
+
+.user-menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  background:#fff;
+  border:1px solid #e6eef2;
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(2,18,20,0.12);
+  min-width:160px;
+  z-index:10001;
+  padding:8px 6px;
+  display:flex;
+  flex-direction:column;
+}
+
+.user-menu-item{
+  background:none;
+  border:none;
+  text-align:left;
+  padding:8px 12px;
+  border-radius:8px;
+  cursor:pointer;
+  color:#062a36;
+  font-weight:600;
+}
+
+.user-menu-item:hover{ background:#f3f6f8 }
 .progress-info{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-family:monospace; color:#0b3b48 }
 .percent{ font-weight:700 }
 .dates{ color:#7b8b92; font-size:0.9rem }
