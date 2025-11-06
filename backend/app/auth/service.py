@@ -255,7 +255,7 @@ async def google_login(
     user = await crud.get_user_by_provider_id(
         db,
         provider="google",
-        provider_id=google_user_info.get("id_token")
+        provider_id=google_user_info.get("id")
     )
     if not user:
         # 신규 사용자 생성 로직 필요
@@ -290,12 +290,13 @@ async def link_oauth_account(
     """
     APP TOKEN으로 OAuth 계정 연결 처리
     """
-    access_token, refresh_token = await rotation_token(request, db)
-    user_uuid = access_token.payload.get("sub")
+    access_token = request.cookies.get("access_token")
+    user_uuid = security.JWTManager.verify_token(access_token, request.app).get("sub")
 
     oauth_user_info = await security.verify_google_token(code)
     if not oauth_user_info:
         raise InvalidTokenException("구글 인증에 실패했습니다.")
+
 
     # 연동 가능한 계정인지 파악
     if not crud.validate_provider_id(
@@ -311,12 +312,9 @@ async def link_oauth_account(
         db=db,
         user_uuid=user_uuid,
         provider=provider,
-        provider_id=oauth_user_info.get("id_token"),
+        provider_id=oauth_user_info.get("id"),
     )
 
-    resp = set_token_cookies(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
-
-    return resp
+    return {
+        'status': True
+    }

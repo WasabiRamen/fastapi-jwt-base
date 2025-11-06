@@ -213,8 +213,6 @@ async def verify_google_token(code: str) -> dict | None:
             "grant_type": "authorization_code"
         })
 
-        print(token_response.json())
-
         if token_response.status_code != 200:
             return None
 

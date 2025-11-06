@@ -247,15 +247,13 @@ async def link_oauth_account(
         user_uuid: str,
         provider: str,
         provider_id: str,
-        email: str = None
     ) -> OAuthAccount:
     """OAuth 계정 연결 처리"""
     db_oauth_account = OAuthAccount(
         oauth_id=f"{provider}_{provider_id}",
         user_uuid=user_uuid,
         provider=provider,
-        provider_id=provider_id,
-        email=email
+        provider_id=provider_id
     )
     db.add(db_oauth_account)
     await db.commit()
@@ -278,10 +276,11 @@ async def get_user_by_provider_id(
             OAuthAccount.provider_id == provider_id
         )
     )
-    user_uuid = result.scalars().first().user_uuid
+    user_uuid = result.scalars().first()
+    
     result = await db.execute(
         select(User).where(
-            User.user_uuid == user_uuid
+            User.user_uuid == user_uuid.user_uuid
         )
     )
     user = result.scalars().first()
