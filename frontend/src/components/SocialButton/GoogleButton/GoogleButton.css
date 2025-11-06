@@ -1,0 +1,45 @@
+.gsi-material-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  border: 1px solid #747775;
+  border-radius: 4px;
+  font-family: 'Roboto', arial, sans-serif;
+  font-size: 14px;
+  height: 46px;        /* 버튼 높이 */
+  padding: 0 12px;
+  width: 400px;        /* 버튼 너비 */
+  max-width: 400px;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+  overflow: hidden;
+}
+
+.gsi-material-button:hover {
+  background-color: #f7f7f7;
+}
+
+.gsi-material-button:disabled {
+  background-color: #f2f2f2;
+  color: #a0a0a0;
+  border-color: #d0d0d0;
+  cursor: not-allowed;
+}
+
+.gsi-material-button-icon {
+  width: 24px;         /* 로고 크기 */
+  height: 24px;
+  margin-right: 12px;  /* 텍스트와 간격 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gsi-material-button-contents {
+  display: inline-block;
+  font-weight: 500;
+  line-height: 20px;
+  color: #1f1f1f;
+}
