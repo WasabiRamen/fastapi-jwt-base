@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import User
-from app.auth.models import RefreshToken, EmailVerificationCode
+from app.auth.models import RefreshToken, EmailVerificationCode, OAuthAccount
 
 from app.auth.core import security
 from app.auth.schemas import RefreshTokenResponse
@@ -204,3 +204,86 @@ async def existing_email_token(db: AsyncSession, token: str) -> bool:
     )
     code = result.scalars().first()
     return code is not None
+
+
+# OAuth CRUD Functions
+# -----------------------------------------------------------------
+
+
+async def validate_provider_id(
+        db: AsyncSession,
+        user_uuid: str,
+        provider: str,
+        provider_id: str
+    ) -> bool:
+    """연동 가능한 상태인지 확인 / 존재 유무 파악"""
+    # user_uuid로 이미 동일 provider가 연결 된 경우
+    result = await db.execute(
+        select(OAuthAccount).where(
+            OAuthAccount.user_uuid == user_uuid,
+            OAuthAccount.provider == provider
+        )
+    )
+    oauth_account = result.scalars().first()
+    if oauth_account:
+        return False
+    
+    # 동일 provider, provider_id가 이미 연결 된 경우
+    result = await db.execute(
+        select(OAuthAccount).where(
+            OAuthAccount.provider == provider,
+            OAuthAccount.provider_id == provider_id
+        )
+    )
+    oauth_account = result.scalars().first()
+    if oauth_account:
+        return False
+    
+    return True
+
+
+async def link_oauth_account(
+        db: AsyncSession,
+        user_uuid: str,
+        provider: str,
+        provider_id: str,
+        email: str = None
+    ) -> OAuthAccount:
+    """OAuth 계정 연결 처리"""
+    db_oauth_account = OAuthAccount(
+        oauth_id=f"{provider}_{provider_id}",
+        user_uuid=user_uuid,
+        provider=provider,
+        provider_id=provider_id,
+        email=email
+    )
+    db.add(db_oauth_account)
+    await db.commit()
+    await db.refresh(db_oauth_account)
+    return db_oauth_account
+
+async def get_user_by_provider_id(
+        db: AsyncSession,
+        provider: str,
+        provider_id: str,
+    ) -> OAuthAccount:
+    """
+    로그인용 CRUD
+    
+    provider_id -> DB 조회 후 연결된 User 정보 반환
+    """
+    result = await db.execute(
+        select(OAuthAccount).where(
+            OAuthAccount.provider == provider,
+            OAuthAccount.provider_id == provider_id
+        )
+    )
+    user_uuid = result.scalars().first().user_uuid
+    result = await db.execute(
+        select(User).where(
+            User.user_uuid == user_uuid
+        )
+    )
+    user = result.scalars().first()
+
+    return user

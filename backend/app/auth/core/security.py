@@ -1,6 +1,7 @@
 import re
 import secrets
 import hashlib
+import httpx
 from datetime import datetime, timezone
 
 import bcrypt
@@ -194,3 +195,39 @@ class EmailTokenManager:
         )
 
 
+async def verify_google_token(code: str) -> dict | None:
+    """
+    구글 OAuth2 토큰 검증 및 사용자 정보 반환
+    """
+
+    token_url = "https://oauth2.googleapis.com/token"
+    user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+    async with httpx.AsyncClient() as client:
+        # 1. 인증 코드로 액세스 토큰 요청
+        token_response = await client.post(token_url, data={
+            "code": code,
+            "client_id": setting.GOOGLE_OAUTH_CLIENT_ID,
+            "client_secret": setting.GOOGLE_OAUTH_CLIENT_SECRET,
+            "redirect_uri": setting.GOOGLE_OAUTH_REDIRECT_URI,
+            "grant_type": "authorization_code"
+        })
+
+        print(token_response.json())
+
+        if token_response.status_code != 200:
+            return None
+
+
+        token_data = token_response.json()
+        access_token = token_data.get("access_token")
+
+        # 2. 액세스 토큰으로 사용자 정보 요청
+        user_response = await client.get(user_info_url, headers={
+            "Authorization": f"Bearer {access_token}"
+        })
+
+        if user_response.status_code != 200:
+            return None
+
+        return user_response.json()

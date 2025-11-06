@@ -27,6 +27,11 @@ class AuthSettings(BaseSettings):
     EMAIL_VERIFY_TOKEN_EXPIRE_MINUTES: int = Field(10, description="이메일 인증 토큰 만료 시간 (분)")
     EMAIL_VERIFY_CODE_LENGTH: int = Field(16, description="이메일 인증 코드 길이")
 
+    # Google OAuth2 Settings
+    GOOGLE_OAUTH_CLIENT_ID: str = Field(..., description="구글 OAuth2 클라이언트 ID")
+    GOOGLE_OAUTH_CLIENT_SECRET: str = Field(..., description="구글 OAuth2 클라이언트 시크릿")
+    GOOGLE_OAUTH_REDIRECT_URI: str = Field(..., description="구글 OAuth2 리다이렉트 URI")
+
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / "config" / ".env.auth",
         env_file_encoding="utf-8"

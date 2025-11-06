@@ -9,6 +9,12 @@ from app.core.settings import redis_settings
 
 DEFAULT_REDIS_URL = f"redis://{redis_settings.REDIS_HOST}:{redis_settings.REDIS_PORT}/{redis_settings.REDIS_DB}"
 
+if redis_settings.REDIS_PASSWORD:
+    if redis_settings.REDIS_USER:
+        DEFAULT_REDIS_URL = f"redis://{redis_settings.REDIS_USER}:{redis_settings.REDIS_PASSWORD}@{redis_settings.REDIS_HOST}:{redis_settings.REDIS_PORT}/{redis_settings.REDIS_DB}"
+    else:
+        DEFAULT_REDIS_URL = f"redis://:{redis_settings.REDIS_PASSWORD}@{redis_settings.REDIS_HOST}:{redis_settings.REDIS_PORT}/{redis_settings.REDIS_DB}"
+
 async def init_redis(app) -> None:
     """
     Lifespan에서 호출: Redis 클라이언트를 1회 생성하여 app.state에 저장

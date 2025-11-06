@@ -68,3 +68,26 @@ async def verify_email_code(
     result = await service.verify_email_token(db, request, form.token, form.code)
     logger.info(f"Email verification token checked for token '{form.token}'.")
     return result
+
+
+@router.post("/google/login")
+async def google_login(
+    request: Request,
+    form: schemas.GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """구글 OAuth2 로그인 콜백 처리"""
+    result = await service.google_login(request, db, form.code)
+    # logger.info(f"Google OAuth2 login processed.")
+    return result
+
+
+@router.post("/google/link")
+async def link_google_account(
+    request: Request,
+    form: schemas.GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """구글 OAuth2 계정 연결 처리"""
+    result = await service.link_oauth_account(request, db, form.code, "google")
+    return result

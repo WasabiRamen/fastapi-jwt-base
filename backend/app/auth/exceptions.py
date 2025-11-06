@@ -94,11 +94,23 @@ class InsufficientPermissionException(HTTPException):
         )
 
 
-class UnauthorizedException(HTTPException):
+class Unauthorizedv(HTTPException):
     """인증되지 않은 사용자인 경우"""
     def __init__(self, message: str = "로그인이 필요합니다."):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=message
+        )
+
+
+# OAuth Exceptions
+# -----------------
+class OAuthAccountNotFoundException(HTTPException):
+    """OAuth 계정이 연결되지 않은 경우"""
+    def __init__(self, provider: str = "OAuth"):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{provider} 계정과 연결된 사용자를 찾을 수 없습니다.",
+            code="oauth_account_not_found"
         )
 
