@@ -2,12 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './Auth.css';
 import api from '../../lib/api';
 import defaultUser from '../../default_user.svg';
-
-declare global {
-  interface Window { google?: any }
-}
-
-const GOOGLE_CLIENT_ID = '1008734949255-c3efrof5a6tri4kh08tens0ckssfohqj.apps.googleusercontent.com';
+import { useGoogleLink } from '../../hooks/useGoogleLink';
 
 export default function Profile(){
   const [loading, setLoading] = useState(true);
@@ -18,9 +13,8 @@ export default function Profile(){
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  // google token client
-  const googleClient = useRef<any>(null);
-  const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
+  // google link hook
+  const { isGoogleReady, handleGoogleLink, googleLoading, googleError, googleLinked, setGoogleLinked } = useGoogleLink();
 
   useEffect(() => {
     let mounted = true;
@@ -39,41 +33,6 @@ export default function Profile(){
     };
     loadUser();
     return () => { mounted = false };
-  }, []);
-
-  useEffect(() => {
-    const init = () => {
-      if (!window.google?.accounts?.oauth2) return;
-      googleClient.current = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'openid profile email',
-        callback: async (resp: any) => {
-          console.log('Google link token', resp);
-          // send token to backend to link account
-          try {
-            await api.post('/api/v1/auth/google/link', { access_token: resp.access_token });
-            setGoogleLinked(true);
-          } catch (e) {
-            setError('구글 연동 중 서버 오류가 발생했습니다.');
-          }
-        },
-        error_callback: (err: any) => {
-          console.error('google link error', err);
-          setError('구글 연동 중 오류가 발생했습니다.');
-        }
-      });
-    };
-
-    if (window.google?.accounts?.oauth2) init();
-    else {
-      const s = document.createElement('script');
-      s.src = 'https://accounts.google.com/gsi/client';
-      s.async = true;
-      s.defer = true;
-      s.onload = init;
-      document.head.appendChild(s);
-      return () => { if (s.parentNode) s.parentNode.removeChild(s) };
-    }
   }, []);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,12 +114,16 @@ export default function Profile(){
                 <button className="small-btn" onClick={unlinkGoogle}>연결해제</button>
               </>
             ) : (
-              <button className="small-btn" onClick={() => {
-                if (!googleClient.current) return setError('구글 클라이언트가 준비되지 않았습니다.');
-                googleClient.current.requestAccessToken({ prompt: 'consent' });
-              }}>구글 연동</button>
+              <button 
+                className="small-btn" 
+                onClick={handleGoogleLink}
+                disabled={!isGoogleReady || googleLoading}
+              >
+                {googleLoading ? '연동 중...' : '구글 연동'}
+              </button>
             )}
           </div>
+          {googleError && <div style={{ color: 'crimson', marginTop: 4, fontSize: '0.9em' }}>{googleError}</div>}
         </div>
       </div>
     </div>
