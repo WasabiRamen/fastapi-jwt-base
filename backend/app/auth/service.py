@@ -46,6 +46,41 @@ def _get_client_ip(request: Request) -> str:
     return ""
 
 
+async def rotation_token(request: Request, db: AsyncSession):
+    old_access_token = request.cookies.get("access_token")
+    try:
+        decode_access_token = security.JWTManager.decode_token_without_expiration(old_access_token, request.app)
+    except ValueError:
+        raise InvalidTokenException("액세스 토큰이 유효하지 않습니다.")
+    
+    user_uuid = decode_access_token.get("sub")
+    old_refresh_token = request.cookies.get("refresh_token")
+
+    refresh_token = await crud.rotate_refresh_token(
+        db,
+        old_refresh_token,
+        user_uuid=user_uuid,
+        ip_address=_get_client_ip(request),
+        user_agent=request.headers.get("user-agent")
+    )
+    access_token = security.JWTManager.create_token(user_uuid, request.app)
+
+    return access_token, refresh_token
+
+
+def set_token_cookies(
+    access_token,
+    refresh_token,
+) -> JSONResponse:
+    resp = JSONResponse({"access_token": access_token.token, "token_type": "bearer"})
+    resp = TokenCookieManager.set_token_cookies(
+        response=resp,
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+    return resp
+
+
 async def create_token(
     request: Request,
     db: AsyncSession,
@@ -91,27 +126,8 @@ async def rotate_refresh_token(
     - 재사용 감지 (재사용 감지시, 모든 토큰 비활성화 X 혹은 옵션으로 만들 계획)
     - 해당 기기의 토큰만 비활성화
     """
-    old_access_token = request.cookies.get("access_token")
-    try:
-        decode_access_token = security.JWTManager.decode_token_without_expiration(old_access_token, request.app)
-    except ValueError:
-        raise InvalidTokenException("액세스 토큰이 유효하지 않습니다.")
-    
-    user_uuid = decode_access_token.get("sub")
-    old_refresh_token = request.cookies.get("refresh_token")
-
-    refresh_token = await crud.rotate_refresh_token(
-        db,
-        old_refresh_token,
-        user_uuid=user_uuid,
-        ip_address=_get_client_ip(request),
-        user_agent=request.headers.get("user-agent")
-    )
-    access_token = security.JWTManager.create_token(user_uuid, request.app)
-
-    resp = JSONResponse({"access_token": access_token.token, "token_type": "bearer"})
-    resp = TokenCookieManager.set_token_cookies(
-        response=resp,
+    access_token, refresh_token = await rotation_token(request, db)
+    resp = set_token_cookies(
         access_token=access_token,
         refresh_token=refresh_token
     )
@@ -218,3 +234,89 @@ async def verify_email_token(
     await crud.update_email_verification_code_as_verified(db, token)
 
     return JSONResponse({"message": "이메일 인증이 완료되었습니다."})
+
+
+# OAuth Service Functions
+# -----------------------------------------------------------------
+
+
+async def google_login(
+       request: Request,
+       db: AsyncSession,
+       code: str
+):
+    """
+    구글 OAuth2 로그인 처리
+    """
+    google_user_info = await security.verify_google_token(code)
+    if not google_user_info:
+       raise InvalidTokenException("구글 인증에 실패했습니다.")
+    
+    user = await crud.get_user_by_provider_id(
+        db,
+        provider="google",
+        provider_id=google_user_info.get("id_token")
+    )
+    if not user:
+        # 신규 사용자 생성 로직 필요
+        raise UserNotFoundException("구글 계정과 연동된 사용자를 찾을 수 없습니다.")
+    
+    user_ip = _get_client_ip(request)
+
+    access_token = security.JWTManager.create_token(user.user_uuid, request.app)
+    refresh_token = await crud.create_refresh_token(
+        db,
+        user_uuid=user.user_uuid,
+        ip_address=user_ip,
+        user_agent=request.headers.get("user-agent")
+    )
+
+    resp = JSONResponse({"access_token": access_token.token, "token_type": "bearer"})
+    resp = TokenCookieManager.set_token_cookies(
+        response=resp,
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+    
+    return resp
+
+
+async def link_oauth_account(
+         request: Request,
+         db: AsyncSession,
+         code: str,
+         provider: str
+):
+    """
+    APP TOKEN으로 OAuth 계정 연결 처리
+    """
+    access_token, refresh_token = await rotation_token(request, db)
+    user_uuid = access_token.payload.get("sub")
+
+    oauth_user_info = await security.verify_google_token(code)
+    if not oauth_user_info:
+        raise InvalidTokenException("구글 인증에 실패했습니다.")
+
+    # 연동 가능한 계정인지 파악
+    if not crud.validate_provider_id(
+        db,
+        user_uuid=user_uuid,
+        provider=provider,
+        provider_id=code
+    ):
+        raise InvalidTokenException("해당 OAuth 계정은 이미 연결되어 있거나 연동할 수 없습니다.")
+
+    # 4. OAuth 계정 연결
+    await crud.link_oauth_account(
+        db=db,
+        user_uuid=user_uuid,
+        provider=provider,
+        provider_id=oauth_user_info.get("id_token"),
+    )
+
+    resp = set_token_cookies(
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+
+    return resp

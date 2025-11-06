@@ -26,6 +26,11 @@ class VerifyEmailRequest(BaseModel):
     code: str = Field(..., description="이메일 인증 코드")
 
 
+class GoogleLoginRequest(BaseModel):
+    """구글 로그인 요청 스키마"""
+    code: str = Field(..., description="구글 OAuth2 인증 코드")
+
+
 # ----------------------------------------------------------------
 
 # 내부 로직에서 사용하는 응답 스키마 정의

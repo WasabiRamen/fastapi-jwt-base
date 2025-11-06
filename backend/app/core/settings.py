@@ -26,6 +26,7 @@ class RedisSettings(BaseSettings):
     REDIS_HOST: str = Field("localhost", description="Redis 호스트")
     REDIS_PORT: int = Field(6379, description="Redis 포트")
     REDIS_DB: int = Field(0, description="Redis 데이터베이스 번호")
+    REDIS_USER: str = Field("", description="Redis 사용자 이름 (없으면 빈 문자열)")
     REDIS_PASSWORD: str = Field("", description="Redis 비밀번호 (없으면 빈 문자열)")
 
     model_config = SettingsConfigDict(
