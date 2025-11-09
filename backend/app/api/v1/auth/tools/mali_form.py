@@ -1,7 +1,3 @@
-from aiosmtplib import SMTP
-from email.message import EmailMessage
-from loguru import logger
-
 def varification_email_form(code: str, expiry: int) -> str:
     html = f""" 
     <!DOCTYPE html>
@@ -83,38 +79,4 @@ def varification_email_form(code: str, expiry: int) -> str:
     </html>
     """
     return html
-
-
-class AsyncEmailSender:
-    """기본 비동기 SMTP 메일러"""
-    def __init__(self, smtp_host, smtp_port, username, password, from_email, use_tls=True):
-        self.smtp_host = smtp_host
-        self.smtp_port = smtp_port
-        self.username = username
-        self.password = password
-        self.from_email = from_email
-        self.use_tls = use_tls
-
-    async def connect(self):
-        self.smtp = SMTP(hostname=self.smtp_host, port=self.smtp_port, start_tls=self.use_tls)
-        await self.smtp.connect()
-        await self.smtp.login(self.username, self.password)
-
-        logger.info(f"SMTP Successfully connected : {self.smtp_host}")
-
-    async def disconnect(self):
-        if self.smtp:
-            await self.smtp.quit()
-
-    async def send_email(self, to: str, subject: str, body: str, subtype="plain"):
-        if not self.smtp:
-            await self.connect()  # 연결이 없으면 연결
-
-        msg = EmailMessage()
-        msg["From"] = self.from_email
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.set_content(body, subtype=subtype)
-
-        await self.smtp.send_message(msg)
 

@@ -5,7 +5,7 @@ from fastapi import Request
 from redis.asyncio import Redis
 from loguru import logger
 
-from app.core.settings import redis_settings
+from app.api.v1.core.settings.redis_setting import redis_settings
 
 DEFAULT_REDIS_URL = f"redis://{redis_settings.REDIS_HOST}:{redis_settings.REDIS_PORT}/{redis_settings.REDIS_DB}"
 
@@ -39,6 +39,7 @@ async def close_redis(app) -> None:
     redis: Optional[Redis] = getattr(app.state, "redis", None)
     if redis is not None:
         # redis-py 5.x: close() + connection_pool.disconnect() 권장
+        logger.info(f"Redis Successfully disconnected : {redis_settings.REDIS_HOST}")
         await redis.close()
         await redis.connection_pool.disconnect()
 

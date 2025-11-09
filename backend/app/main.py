@@ -1,49 +1,90 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+# Standard Library
 from contextlib import asynccontextmanager
 
-from app.core.settings import app_settings
-from app.core.settings import smtp_settings
-from app.auth.tools.async_mailer import AsyncEmailSender
+# FastAPI
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+# Settings
+from app.api.v1.core.settings.app_setting import app_settings
+from app.api.v1.core.settings.smtp_setting import smtp_settings
+from app.api.v1.core.settings.database_setting import database_settings
+from app.api.v1.core.settings.auth_setting import auth_settings
+
+# Core
+from app.api.v1.core.database import init_db, close_db, databaseSettings
+from app.api.v1.core.redis import init_redis, close_redis
+from app.api.v1.core.smtp import AsyncEmailSender
+
+# Tools
+from app.api.v1.auth.tools.key_manager import JWTSecretKeyManager
+
+#routers
 from app.api.v1 import router as v1_router
-from app.core.database import init_db, close_db
-from app.core.redis import init_redis, close_redis
 
-from app.auth.tools.key_manager import JWTSecretKeyManager
 
+database = databaseSettings(
+    host=database_settings.DB_HOST,
+    port=database_settings.DB_PORT,
+    user=database_settings.DB_USER,
+    password=database_settings.DB_PASSWORD,
+    name=database_settings.DB_NAME,
+)
+
+smtp = AsyncEmailSender.AsyncEmailSenderSettings(
+    smtp_host=smtp_settings.SMTP_HOST,
+    smtp_port=smtp_settings.SMTP_PORT,
+    username=smtp_settings.SMTP_USER,
+    password=smtp_settings.SMTP_PASSWORD,
+    from_email=smtp_settings.SMTP_USER,
+    use_tls=True
+)
+
+key_manager_settings = JWTSecretKeyManager.setting(
+    SECRET_KEY_PATH=auth_settings.SECRET_KEY_PATH,
+    SECRET_KEY_ROTATION_DAYS=auth_settings.SECRET_KEY_ROTATION_DAYS
+)
+
+
+from contextlib import asynccontextmanager
+import asyncio
+import logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # JWT Key Manager
-    manager = JWTSecretKeyManager()
+    manager = JWTSecretKeyManager(
+        auth_settings.SECRET_KEY_PATH,
+        auth_settings.SECRET_KEY_ROTATION_DAYS
+    )
     await manager.init()
     app.state.jwt_manager = manager
 
     # DB
-    await init_db(app)
+    await init_db(app, database)
 
     # Redis
     await init_redis(app)
 
     # SMTP
-    app.state.smtp = AsyncEmailSender(
-        smtp_host=smtp_settings.SMTP_HOST,
-        smtp_port=smtp_settings.SMTP_PORT,
-        username=smtp_settings.SMTP_USER,
-        password=smtp_settings.SMTP_PASSWORD,
-        from_email=smtp_settings.SMTP_USER,
-        use_tls=True
-    )
+    app.state.smtp = AsyncEmailSender(smtp)
     await app.state.smtp.connect()
 
     try:
         yield
     finally:
-        manager.scheduler.shutdown(wait=False)
-        # Shutdown: 전역 리소스 정리
-        await close_db(app)
-        await close_redis(app)
-        await app.state.smtp.disconnect()
+        # Shutdown: 전역 리소스 정리 (순서 및 예외 안전성 강화)
+        cleanup_tasks = [
+            ("SMTP", app.state.smtp.disconnect),
+            ("Redis", lambda: close_redis(app)),
+            ("DB", lambda: close_db(app)),
+            ("Scheduler", lambda: asyncio.to_thread(manager.scheduler.shutdown, wait=True)),
+        ]
+        for name, task in cleanup_tasks:
+            try:
+                await task()
+            except Exception as e:
+                logging.exception(f"[Shutdown] Failed to close {name}: {e}")
 
 
 app = FastAPI(
@@ -63,7 +104,7 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/health", description="Health Check")
 def read_root():
     """헬스체크 엔드포인트"""
     return {"Health": "OK"}

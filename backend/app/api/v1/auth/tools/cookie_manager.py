@@ -1,7 +1,8 @@
 from fastapi import Response
+from fastapi.responses import JSONResponse
 
-from app.auth.schemas import AccessTokenResponse, RefreshTokenResponse
-from app.auth.setting import setting
+from app.api.v1.core.security import JWTManager, RefreshTokenManager
+from app.api.v1.core.settings.auth_setting import auth_settings as setting
 
 
 class TokenCookieManager:
@@ -13,8 +14,8 @@ class TokenCookieManager:
     def set_token_cookies(
         cls,
         response: Response,
-        access_token: AccessTokenResponse,
-        refresh_token: RefreshTokenResponse
+        access_token: JWTManager.TokenResponse,
+        refresh_token: RefreshTokenManager.TokenResponse
         ) -> Response:
         
         response.set_cookie(
@@ -24,7 +25,7 @@ class TokenCookieManager:
             secure=cls.TOKEN_COOKIE_SECURE,
             samesite=cls.SAMESITE,
             expires=access_token.expires_at,
-            max_age=access_token.expires_in,
+            max_age=access_token.expires_at - access_token.created_at,
             path=cls.TOKEN_COOKIE_PATH
         )
 
@@ -35,7 +36,7 @@ class TokenCookieManager:
             secure=cls.TOKEN_COOKIE_SECURE,
             samesite=cls.SAMESITE,
             expires=refresh_token.expires_at,
-            max_age=refresh_token.expires_in,
+            max_age=refresh_token.expires_at - refresh_token.created_at,
             path=cls.TOKEN_COOKIE_PATH
         )
         return response
@@ -45,3 +46,4 @@ class TokenCookieManager:
         response.delete_cookie("access_token", path="/")
         response.delete_cookie("refresh_token", path="/")
         return response
+

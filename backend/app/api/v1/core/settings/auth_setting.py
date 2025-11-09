@@ -1,8 +1,10 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
 from pathlib import Path
 
 class AuthSettings(BaseSettings):
+    """인증 및 보안 설정"""
     # PassWord Manager Settings
     BCRYPT_ROUNDS: int = Field(12, description="Bcrypt 해싱 라운드 수")
 
@@ -33,8 +35,8 @@ class AuthSettings(BaseSettings):
     GOOGLE_OAUTH_REDIRECT_URI: str = Field(..., description="구글 OAuth2 리다이렉트 URI")
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] / "config" / ".env.auth",
+        env_file=Path(__file__).resolve().parents[5] / "config" / ".env.auth",
         env_file_encoding="utf-8"
     )
 
-setting = AuthSettings()
+auth_settings = AuthSettings()
