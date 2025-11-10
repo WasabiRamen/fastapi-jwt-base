@@ -151,30 +151,17 @@ async def create_auth_user(
     return new_user
 
 
-async def issue_token(
+async def _issue_token(
     request: Request,
     db: AsyncSession,
-    form_data: OAuth2PasswordRequestForm | None = None,
-    social_mode: bool = False,
-    user_uuid: str | None = None
+    user_uuid: str = None,
 ) -> IssueTokenResponse:
     """
-    액세스 토큰 발급
-    
-    아이디 > 비밀번호 순으로 검증하고 발급
+    액세스 토큰 및 리프래시 토큰 발급
 
-    social_mode가 True면 form_data 무시하고 user_uuid로 바로 발급
+    Description:
+        내부 함수로, 토큰 발급 로직을 캡슐화
     """
-    if not social_mode:
-        user = await crud.get_user_by_user_id(db, form_data.username)
-        if not user:
-            raise UserNotFoundException()
-        password_manager.verify_password(form_data.password, user.password)
-        user_uuid = user.user_uuid
-
-    print(get_secret_key(request.app))
-    
-
     access_token = jwt_manager.issue_token(user_uuid, get_secret_key(request.app))
     refresh_token = await crud.issue_refresh_token(
         db,
@@ -187,6 +174,55 @@ async def issue_token(
         access_token=access_token,
         refresh_token=refresh_token
     )
+
+
+async def issue_token_by_login_form(
+    request: Request,
+    db: AsyncSession,
+    form_data: OAuth2PasswordRequestForm
+) -> IssueTokenResponse:
+    """
+    액세스 토큰 발급
+    
+    아이디 > 비밀번호 순으로 검증하고 발급
+
+    social_mode가 True면 form_data 무시하고 user_uuid로 바로 발급
+
+    @TODO 소셜 로그인 처리 로직 분리
+    """
+    user = await crud.get_user_by_user_id(db, form_data.username)
+    if not user:
+        raise UserNotFoundException()
+    password_manager.verify_password(form_data.password, user.password)
+    user_uuid = user.user_uuid
+
+    tokens =  await _issue_token(
+        request,
+        db,
+        user_uuid=user_uuid
+    )
+
+    return tokens
+
+
+async def verify_access_token(
+    request: Request,
+    access_token: str
+) -> str:
+    """
+    액세스 토큰 검증
+
+    Description:
+        - 액세스 토큰의 유효성을 검사하고, 필요한 경우 사용자 정보를 반환
+    """
+    secret_key = get_secret_key(request.app)
+    try:
+        payload = jwt_manager.decode_token(access_token, secret_key)
+        user_uuid = payload.get("sub")
+        return user_uuid
+    except Exception as e:
+        logger.error(f"Failed to verify access token: {e}")
+        return "Invalid access token"
 
 
 async def rotate_tokens(request: Request, db: AsyncSession) -> IssueTokenResponse:
@@ -367,6 +403,11 @@ async def google_login(
 ):
     """
     구글 OAuth2 로그인 처리
+
+    Description:
+        구글에서 제공한 code로 사용자 정보 조회
+        기존 사용자면 토큰 발급
+        신규 사용자면 예외 발생 (추후 회원가입 로직 필요)
     """
     google_user_info = await google_oauth2_manager.code_to_token(code)
     if not google_user_info:
@@ -381,14 +422,14 @@ async def google_login(
         # 신규 사용자 생성 로직 필요
         raise UserNotFoundException("구글 계정과 연동된 사용자를 찾을 수 없습니다.")
 
-    tokens = await issue_token(
+    tokens =  await _issue_token(
         request,
         db,
-        social_mode=True,
         user_uuid=user.user_uuid
     )
-    
+
     return tokens
+
 
 
 async def link_oauth_account(
@@ -404,7 +445,8 @@ async def link_oauth_account(
         access token이 유효한 상태여야함.
     """
     access_token = request.cookies.get("access_token")
-    user_uuid = jwt_manager.verify_token(access_token, request.app).get("sub")
+    secret_key = get_secret_key(request.app)
+    user_uuid = jwt_manager.decode_token(access_token, secret_key).get("sub")
 
     oauth_user_info = await google_oauth2_manager.code_to_token(code)
     if not oauth_user_info:

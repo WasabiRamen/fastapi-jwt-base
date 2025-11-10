@@ -4,6 +4,7 @@ import './Main.css';
 import logo from '../logo.svg';
 import defaultUser from '../default_user.svg';
 import api from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import LaunchClock from '../components/LaunchClock';
 
 export default function Main() {
@@ -23,24 +24,25 @@ export default function Main() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(getInitial);
   const [checking, setChecking] = useState<boolean>(true);
   const navigate = useNavigate();
+  const auth = useAuth();
 
   useEffect(() => {
     let mounted = true;
     const check = async () => {
       try {
-        const resp = await api.get('/api/v1/accounts/me');
-        if (mounted && resp.status === 200) {
+        await auth.fetchCurrentUser();
+        if (mounted) {
           setIsLoggedIn(true);
           try { sessionStorage.setItem('isLoggedIn', 'true'); } catch {}
           return;
         }
       } catch (err: any) {
-        const status = err?.response?.status;
+        const status = (err as any)?.response?.status;
         if (status === 401) {
           try {
             await api.post('/api/v1/auth/token/refresh');
-            const retry = await api.get('/api/v1/accounts/me');
-            if (mounted && retry.status === 200) {
+            await auth.fetchCurrentUser();
+            if (mounted) {
               setIsLoggedIn(true);
               try { sessionStorage.setItem('isLoggedIn', 'true'); } catch {}
               return;

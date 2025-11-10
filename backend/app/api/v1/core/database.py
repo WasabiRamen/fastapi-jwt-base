@@ -1,18 +1,16 @@
 import os
 from typing import AsyncGenerator, Optional
-from fastapi import FastAPI
-
-from fastapi import Request
+from fastapi import FastAPI, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 from loguru import logger
+from urllib.parse import quote_plus
 
 
 # 데이터베이스 init 할 때 필요 config
-class databaseSettings(BaseModel):
+class DatabaseSettings(BaseModel):
     host: str = Field(..., description="데이터베이스 호스트")
     port: int = Field(..., description="데이터베이스 포트")
     user: str = Field(..., description="데이터베이스 사용자 이름")
@@ -20,13 +18,16 @@ class databaseSettings(BaseModel):
     name: str = Field(..., description="데이터베이스 이름")
 
 
-def get_database_url(setting: databaseSettings) -> str:
-    return f"postgresql+asyncpg://{setting.user}:{setting.password}@{setting.host}:{setting.port}/{setting.name}"
+def get_database_url(setting: DatabaseSettings) -> str:
+    # 사용자/비밀번호에 특수문자가 포함될 수 있으므로 인코딩
+    user = quote_plus(setting.user)
+    password = quote_plus(setting.password)
+    return f"postgresql+asyncpg://{user}:{password}@{setting.host}:{setting.port}/{setting.name}"
 
 Base = declarative_base()
 
 
-async def init_db(app, setting: databaseSettings) -> None:
+async def init_db(app: FastAPI, setting: DatabaseSettings) -> None:
     """
     Lifespan에서 호출: 엔진/세션메이커를 1회 생성하여 app.state에 저장
     """
@@ -44,9 +45,12 @@ async def init_db(app, setting: databaseSettings) -> None:
     app.state.db_engine = engine
     app.state.async_session_maker = SessionLocal
 
-    # 필요 시 여기서 스키마 생성 등 초기화
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # 스키마 자동 생성(개발 환경에서만 사용 권장)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception:
+        logger.exception("DB schema create_all 실패")
 
     logger.info(f"DB Successfully connected : {setting.host}")
 
@@ -64,7 +68,9 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
     """
     요청 단위 의존성: 세션을 열고, 요청 처리 후 자동 닫기
     """
-    SessionLocal = request.app.state.async_session_maker
+    SessionLocal = getattr(request.app.state, "async_session_maker", None)
+    if SessionLocal is None:
+        raise RuntimeError("Async session maker is not initialized on app.state")
     async with SessionLocal() as session:
         yield session
 

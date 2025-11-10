@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 
+// module-level in-flight promise to dedupe concurrent requests for current user
+let currentUserInFlight: Promise<any> | null = null;
+
 interface LoginResponse {
   access_token: string;
   token_type: string;
@@ -19,6 +22,10 @@ interface AuthContextType extends AuthState {
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
   clearError: () => void;
+  // current user and helpers
+  currentUser: any | null;
+  fetchCurrentUser: (force?: boolean) => Promise<any>;
+  invalidateCurrentUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +40,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading: false,
     error: null,
   });
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
   const navigate = useNavigate();
 
   const login = async (username: string, password: string): Promise<void> => {
@@ -58,6 +66,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         loading: false, 
         error: null 
       }));
+      // after login, populate current user (best-effort)
+      try { await fetchCurrentUser(true); } catch (_) {}
       
       navigate('/');
     } catch (err: any) {
@@ -75,7 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       sessionStorage.removeItem('isLoggedIn');
     } catch {}
-    
+    setCurrentUser(null);
     setAuthState({
       isLoggedIn: false,
       loading: false,
@@ -84,6 +94,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     navigate('/account/login');
   };
+
+  // fetchCurrentUser: cached + in-flight dedupe
+  const fetchCurrentUser = async (force = false) => {
+    if (!force && currentUser) return currentUser;
+    if (currentUserInFlight) return currentUserInFlight;
+    currentUserInFlight = api.get('/api/v1/accounts/me')
+      .then(r => {
+        setCurrentUser(r.data);
+        try { sessionStorage.setItem('isLoggedIn', 'true'); } catch {}
+        setAuthState(prev => ({ ...prev, isLoggedIn: true }));
+        currentUserInFlight = null;
+        return r.data;
+      })
+      .catch(err => {
+        currentUserInFlight = null;
+        // if unauthorized, mark logged out
+        const status = (err as any)?.response?.status;
+        if (status === 401) {
+          try { sessionStorage.setItem('isLoggedIn', 'false'); } catch {}
+          setAuthState(prev => ({ ...prev, isLoggedIn: false }));
+        }
+        throw err;
+      });
+    return currentUserInFlight;
+  };
+
+  const invalidateCurrentUser = () => setCurrentUser(null);
 
   const setError = (error: string | null) => {
     setAuthState(prev => ({ ...prev, error }));
@@ -99,11 +136,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const contextValue: AuthContextType = {
     ...authState,
+    currentUser,
     login,
     logout,
     setError,
     setLoading,
     clearError,
+    fetchCurrentUser,
+    invalidateCurrentUser,
   };
 
   return (

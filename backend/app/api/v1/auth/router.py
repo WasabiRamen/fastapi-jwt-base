@@ -36,7 +36,7 @@ def token_response(
 
 token_router = APIRouter(tags=["Token"])
 
-@token_router.post('/', description="로그인 하여 액세스 토큰 및 리프래시 토큰 발급")
+@token_router.post('', description="로그인 하여 액세스 토큰 및 리프래시 토큰 발급")
 async def issue_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -45,7 +45,7 @@ async def issue_token(
     """
     로그인 하여 액세스 토큰 및 리프래시 토큰 발급
     """
-    tokens: service.IssueTokenResponse = await service.issue_token(request, db, form_data)
+    tokens: service.IssueTokenResponse = await service.issue_token_by_login_form(request, db, form_data)
     logger.info(f"User '{form_data.username}' logged in and tokens issued.")
 
     return token_response(tokens)
@@ -75,7 +75,7 @@ async def revoke_token(
 
 email_router = APIRouter(tags=["Email"])
 
-@email_router.post("/")
+@email_router.post("")
 async def send_email_verification(
     form: schemas.SendEmailRequest,
     db: AsyncSession = Depends(get_db),
@@ -103,7 +103,7 @@ async def verify_email_code(
 
 google_router = APIRouter(tags=["Google"])
 
-@google_router.post("/google/login")
+@google_router.post("/login")
 async def google_login(
     request: Request,
     form: schemas.GoogleLoginRequest,
@@ -115,7 +115,7 @@ async def google_login(
     return result
 
 
-@google_router.post("/google/link")
+@google_router.post("/link")
 async def link_google_account(
     request: Request,
     form: schemas.GoogleLoginRequest,

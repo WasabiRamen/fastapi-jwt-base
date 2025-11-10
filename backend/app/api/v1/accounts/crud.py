@@ -22,3 +22,15 @@ async def create_account(
     await db.commit()
     await db.refresh(new_account)
     return new_account
+
+
+async def get_account_by_uuid(
+        db: AsyncSession,
+        user_uuid: str,
+    ) -> Account | None:
+    """user_uuid로 계정 조회"""
+    result = await db.execute(
+        select(Account).where(Account.user_uuid == user_uuid)
+    )
+    account = result.scalars().first()
+    return account

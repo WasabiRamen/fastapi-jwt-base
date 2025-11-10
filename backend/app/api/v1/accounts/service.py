@@ -11,11 +11,10 @@ from fastapi.requests import Request
 
 # App imports
 from app.api.v1.accounts import crud
-from app.api.v1.auth.service import create_auth_user
+from app.api.v1.auth.service import create_auth_user, verify_access_token
 
 
 async def create_account(
-    request: Request,
     db: AsyncSession,
     user_id: str,
     password: str,
@@ -38,6 +37,8 @@ async def create_account(
         email_token=email_token,
     )
 
+    user_uuid = auth_user.user_uuid
+
     new_account = await crud.create_account(
         db=db,
         user_name=user_name,
@@ -47,3 +48,21 @@ async def create_account(
     )
     logger.info(f"Account created successfully for user_id: {user_id}")
     return new_account
+
+
+async def get_current_user(
+        db: AsyncSession,
+        request: Request
+    ):
+    access_token = request.cookies.get("access_token")
+    user_uuid = await verify_access_token(
+        request=request,
+        access_token=access_token
+    )
+    if not user_uuid:
+        return None
+    result = await crud.get_account_by_uuid(
+        db=db,
+        user_uuid=user_uuid
+    )
+    return result

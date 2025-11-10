@@ -9,7 +9,7 @@ class AuthSettings(BaseSettings):
     BCRYPT_ROUNDS: int = Field(12, description="Bcrypt 해싱 라운드 수")
 
     # Key Manager Settings
-    SECRET_KEY_PATH: str = Field("./app/auth/tools/jwt_secret.key", description="JWT 비밀 키 파일 경로")
+    SECRET_KEY_PATH: str = Field("./app/api/v1/auth/tools/jwt_secret.key", description="JWT 비밀 키 파일 경로")
     SECRET_KEY_ROTATION_DAYS: int = Field(30, description="JWT 비밀 키 교체 주기 (일)")
 
     # JWT Manager Settings

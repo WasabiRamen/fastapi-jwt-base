@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './Auth.css';
 import api from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 import defaultUser from '../../default_user.svg';
 import { useGoogleLink } from '../../hooks/useGoogleLink';
 
 export default function Profile(){
+  const auth = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<{ username: string; email: string; avatar_url?: string } | null>(null);
@@ -20,11 +22,11 @@ export default function Profile(){
     let mounted = true;
     const loadUser = async () => {
       try {
-        const res = await api.get('/api/v1/accounts/me');
+        const data = await auth.fetchCurrentUser();
         if (!mounted) return;
-        setUser(res.data || { username: '', email: '' });
+        setUser(data || { username: '', email: '' });
         // rudimentary: if the response contains google_linked flag
-        if (res.data?.google_linked) setGoogleLinked(true);
+        if (data?.google_linked) setGoogleLinked(true);
       } catch (err:any) {
         setError('사용자 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
@@ -50,9 +52,9 @@ export default function Profile(){
     try {
       setLoading(true);
       await api.post('/api/v1/accounts/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      // refresh user
-      const resp = await api.get('/api/v1/accounts/me');
-      setUser(resp.data);
+      // refresh user via centralized fetch (force)
+      const data = await auth.fetchCurrentUser(true);
+      setUser(data);
       setPreview(null);
     } catch (err:any) {
       setError('아바타 업로드에 실패했습니다.');

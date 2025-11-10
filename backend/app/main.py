@@ -1,8 +1,14 @@
 # Standard Library
+import asyncio
 from contextlib import asynccontextmanager
 
+# Third Party
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
 # FastAPI
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # Settings
@@ -12,7 +18,7 @@ from app.api.v1.core.settings.database_setting import database_settings
 from app.api.v1.core.settings.auth_setting import auth_settings
 
 # Core
-from app.api.v1.core.database import init_db, close_db, databaseSettings
+from app.api.v1.core.database import init_db, close_db, DatabaseSettings, get_db, db_healthcheck
 from app.api.v1.core.redis import init_redis, close_redis
 from app.api.v1.core.smtp import AsyncEmailSender
 
@@ -23,7 +29,7 @@ from app.api.v1.auth.tools.key_manager import JWTSecretKeyManager
 from app.api.v1 import router as v1_router
 
 
-database = databaseSettings(
+database = DatabaseSettings(
     host=database_settings.DB_HOST,
     port=database_settings.DB_PORT,
     user=database_settings.DB_USER,
@@ -40,15 +46,6 @@ smtp = AsyncEmailSender.AsyncEmailSenderSettings(
     use_tls=True
 )
 
-key_manager_settings = JWTSecretKeyManager.setting(
-    SECRET_KEY_PATH=auth_settings.SECRET_KEY_PATH,
-    SECRET_KEY_ROTATION_DAYS=auth_settings.SECRET_KEY_ROTATION_DAYS
-)
-
-
-from contextlib import asynccontextmanager
-import asyncio
-import logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,7 +81,7 @@ async def lifespan(app: FastAPI):
             try:
                 await task()
             except Exception as e:
-                logging.exception(f"[Shutdown] Failed to close {name}: {e}")
+                logger.error(f"[Shutdown] Failed to close {name}: {e}")
 
 
 app = FastAPI(
@@ -105,6 +102,16 @@ app.add_middleware(
 
 
 @app.get("/health", description="Health Check")
-def read_root():
+async def read_root(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
     """헬스체크 엔드포인트"""
-    return {"Health": "OK"}
+    db_health = await db_healthcheck(db)
+    react_health = request.app.state.redis.ping()
+
+    return {
+        "status": "ok",
+        "database": "ok" if db_health else "error",
+        "redis": "ok" if react_health else "error"
+    }
