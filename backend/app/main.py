@@ -12,45 +12,47 @@ from fastapi.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # Settings
-from app.api.v1.core.settings.app_setting import app_settings
-from app.api.v1.core.settings.smtp_setting import smtp_settings
-from app.api.v1.core.settings.database_setting import database_settings
-from app.api.v1.core.settings.auth_setting import auth_settings
+from app.shared.core.settings import (
+    get_database_runtime,
+    get_redis_runtime,
+    get_smtp_runtime,
+    get_auth_settings,
+    get_app_settings,
+    get_cors_settings
+)
 
 # Core
-from app.api.v1.core.database import init_db, close_db, DatabaseSettings, get_db, db_healthcheck
-from app.api.v1.core.redis import init_redis, close_redis
-from app.api.v1.core.smtp import AsyncEmailSender
-
-# Tools
-from app.api.v1.auth.tools.key_manager import JWTSecretKeyManager
-
-#routers
-from app.api.v1 import router as v1_router
-
-
-database = DatabaseSettings(
-    host=database_settings.DB_HOST,
-    port=database_settings.DB_PORT,
-    user=database_settings.DB_USER,
-    password=database_settings.DB_PASSWORD,
-    name=database_settings.DB_NAME,
+from app.shared.core.database import (
+    init_db,
+    close_db,
+    get_db,
+    db_healthcheck
 )
-
-smtp = AsyncEmailSender.AsyncEmailSenderSettings(
-    smtp_host=smtp_settings.SMTP_HOST,
-    smtp_port=smtp_settings.SMTP_PORT,
-    username=smtp_settings.SMTP_USER,
-    password=smtp_settings.SMTP_PASSWORD,
-    from_email=smtp_settings.SMTP_USER,
-    use_tls=True
+from app.shared.core.redis import (
+    init_redis,
+    close_redis
 )
+from app.shared.core.async_mail_client import AsyncEmailClient
+
+# Services
+from app.service.auth.core.security import JWTSecretService
+from app.service.auth import router as auth_router
+from app.service.accounts import router as accounts_router
+
+
+auth_settings = get_auth_settings()
+smtp_runtime = get_smtp_runtime()
+app_settings = get_app_settings()
+cors_settings = get_cors_settings()
+database_runtime = get_database_runtime()
+redis_runtime = get_redis_runtime()
+smtp_runtime = get_smtp_runtime()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # JWT Key Manager
-    manager = JWTSecretKeyManager(
+    manager = JWTSecretService(
         auth_settings.SECRET_KEY_PATH,
         auth_settings.SECRET_KEY_ROTATION_DAYS
     )
@@ -58,13 +60,13 @@ async def lifespan(app: FastAPI):
     app.state.jwt_manager = manager
 
     # DB
-    await init_db(app, database)
+    await init_db(app, database_runtime)
 
     # Redis
-    await init_redis(app)
+    await init_redis(app, redis_runtime)
 
     # SMTP
-    app.state.smtp = AsyncEmailSender(smtp)
+    app.state.smtp = AsyncEmailClient(smtp_runtime)
     await app.state.smtp.connect()
 
     try:
@@ -84,18 +86,23 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[Shutdown] Failed to close {name}: {e}")
 
 
+# app Instance
 app = FastAPI(
-    title=app_settings.APP_NAME,
-    version=app_settings.APP_VERSION,
-    lifespan=lifespan
+    title=app_settings.NAME,
+    version=app_settings.VERSION,
+    lifespan=lifespan,
+    prefix="/api"
     )
-app.include_router(v1_router, prefix="/api/v1")
+
+# Bind Routers
+app.include_router(auth_router)
+app.include_router(accounts_router)
 
 # CORS 설정 - HTTP 테스트 가능하도록 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=app_settings.CORS_ORIGINS.split(",") if app_settings.CORS_ORIGINS else [],
-    allow_credentials=app_settings.CORS_ALLOW_CREDENTIALS,  # 쿠키 포함 요청 허용
+    allow_origins=cors_settings.origins_list,  # 허용할 출처 목록
+    allow_credentials=cors_settings.ALLOW_CREDENTIALS,  # 쿠키 포함 요청 허용
     allow_methods=["*"],     # 모든 HTTP 메서드 허용
     allow_headers=["*"],     # 모든 헤더 허용
 )
