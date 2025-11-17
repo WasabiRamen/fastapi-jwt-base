@@ -40,7 +40,7 @@ export default function Main() {
         const status = (err as any)?.response?.status;
         if (status === 401) {
           try {
-            await api.post('/api/v1/auth/token/refresh');
+            await api.post('/auth/token/refresh');
             await auth.fetchCurrentUser();
             if (mounted) {
               setIsLoggedIn(true);
@@ -64,7 +64,7 @@ export default function Main() {
   }, []);
 
   const handleLogout = async () => {
-    try { await api.delete('/api/v1/auth/logout'); } catch (e) {}
+    try { await api.delete('/auth/logout'); } catch (e) {}
     setIsLoggedIn(false);
     try { sessionStorage.setItem('isLoggedIn', 'false'); } catch {}
     navigate('/');

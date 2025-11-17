@@ -51,7 +51,7 @@ export default function Profile(){
     fd.append('avatar', f);
     try {
       setLoading(true);
-      await api.post('/api/v1/accounts/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post('/accounts/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       // refresh user via centralized fetch (force)
       const data = await auth.fetchCurrentUser(true);
       setUser(data);
@@ -65,7 +65,7 @@ export default function Profile(){
 
   const unlinkGoogle = async () => {
     try {
-      await api.post('/api/v1/auth/google/unlink');
+      await api.post('/auth/google/unlink');
       setGoogleLinked(false);
     } catch (err) {
       setError('구글 연동 해제 중 오류가 발생했습니다.');

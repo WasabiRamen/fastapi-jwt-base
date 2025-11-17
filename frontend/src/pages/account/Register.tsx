@@ -85,7 +85,7 @@ export default function Register() {
         phone_number: '',
       }
 
-      await api.post('/api/v1/accounts', payload);
+      await api.post('/accounts', payload);
       // Redirect to login after success
       navigate('/account/login');
     } catch (err) {
@@ -110,8 +110,8 @@ export default function Register() {
     }
     setSendLoading(true);
     try {
-      // 요청: 서버에 이메일 인증 토큰 생성 (POST /api/v1/auth/email)
-      const res = await api.post('/api/v1/auth/email', { email });
+      // 요청: 서버에 이메일 인증 토큰 생성 (POST /auth/email)
+      const res = await api.post('/auth/email', { email });
       // 응답에서 token을 꺼내 컴포넌트 state에 저장 (로컬스토리지 대신)
       const token = res?.data?.token;
       if (!token) {
@@ -149,7 +149,7 @@ export default function Register() {
         return;
       }
 
-  await api.post('/api/v1/auth/email/verify', { token, code });
+  await api.post('/auth/email/verify', { token, code });
   // 성공하면 상태 업데이트 (토큰은 회원가입 시 사용하므로 유지)
       setEmailVerified(true);
       setCodeSent(false);

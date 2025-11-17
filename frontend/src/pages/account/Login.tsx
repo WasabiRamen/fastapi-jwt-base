@@ -18,7 +18,7 @@ const handleLogin = async (username: string, password: string): Promise<LoginRes
   params.append('username', username);
   params.append('password', password);
   // OAuth2PasswordRequestForm may expect grant_type, scope, etc. but username/password are sufficient here.
-  const response = await api.post<LoginResponse>('/api/v1/auth/token', params, {
+  const response = await api.post<LoginResponse>('/auth/token', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
   });
   return response.data;

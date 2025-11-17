@@ -52,7 +52,7 @@ export const useGoogleLink = (): UseGoogleLinkReturn => {
             setGoogleLoading(true);
             setGoogleError(null);
 
-            const resp = await api.post('/api/v1/auth/google/link', { 
+            const resp = await api.post('/auth/google/link', { 
               code: codeResponse.code,
             });
 

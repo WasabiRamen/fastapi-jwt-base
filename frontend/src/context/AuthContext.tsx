@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       params.append('username', username);
       params.append('password', password);
       
-      await api.post<LoginResponse>('/api/v1/auth/token', params, {
+      await api.post<LoginResponse>('/auth/token', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
 
@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchCurrentUser = async (force = false) => {
     if (!force && currentUser) return currentUser;
     if (currentUserInFlight) return currentUserInFlight;
-    currentUserInFlight = api.get('/api/v1/accounts/me')
+    currentUserInFlight = api.get('/accounts/me')
       .then(r => {
         setCurrentUser(r.data);
         try { sessionStorage.setItem('isLoggedIn', 'true'); } catch {}

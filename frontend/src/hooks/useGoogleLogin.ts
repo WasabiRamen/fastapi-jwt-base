@@ -51,7 +51,7 @@ export const useGoogleLogin = (): UseGoogleLoginReturn => {
             setGoogleLoading(true);
             setGoogleError(null);
 
-            const resp = await api.post('/api/v1/auth/google/login', { 
+            const resp = await api.post('/auth/google/login', { 
               code: codeResponse.code,
             });
 
