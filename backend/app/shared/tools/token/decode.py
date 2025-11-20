@@ -106,17 +106,17 @@ async def decode_token(request: Request, db: AsyncSession, token: str, options: 
         # 그 외 예외는 검증 실패로 래핑
         raise ValueError("토큰 검증에 실패하였습니다.") from e
 
-async def decode_token_without_expiration(request: Request, token: str) -> dict:
+async def decode_token_without_expiration(request: Request, db: AsyncSession, token: str) -> dict:
     """만료 검증 없이 JWT 토큰 디코딩 및 payload 반환"""
     option = {
         "verify_exp": False
     }
-    return await decode_token(request, token, option)
+    return await decode_token(request, db, token, option)
     
-async def decode_token_without_validation(request: Request, token: str) -> dict:
+async def decode_token_without_validation(request: Request, db: AsyncSession, token: str) -> dict:
     """검증 없이 JWT 토큰 디코딩 및 payload 반환"""
     options = {
         "verify_signature": False,
         "verify_exp": False
         }
-    return await decode_token(request, token, options)
+    return await decode_token(request, db, token, options)
