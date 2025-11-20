@@ -6,7 +6,7 @@ email verification, and OAuth integration.
 
 from .app.routers import router
 from .app import service
-from .core.security.jwt_secret_service import JWTSecretService
+from .tools.rsa_keys.key_rotation import RSAKeyRotation
 
 __all__ = [
     # Routers
@@ -16,5 +16,5 @@ __all__ = [
     "service",
 
     # lifespan hooks can be added here in the future
-    "JWTSecretService"
+    "RSAKeyRotation"
 ]

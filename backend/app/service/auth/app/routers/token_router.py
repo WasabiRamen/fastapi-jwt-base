@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 # SQLAlchemy & Third Party imports
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 from loguru import logger
 
 # App imports
@@ -15,6 +16,7 @@ from .. import service, schemas
 
 # Shared imports
 from app.shared.core.database import get_db
+from app.shared.core.redis import get_redis
 from app.shared.core.cookie_handler import AuthCookieHandler
 from app.shared.core.settings import get_cookie_settings
 
@@ -40,11 +42,12 @@ async def issue_token(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> JSONResponse:
     """
     로그인 하여 액세스 토큰 및 리프래시 토큰 발급
     """
-    tokens: service.IssueTokenResponse = await service.issue_token_by_login_form(request, db, form_data)
+    tokens: service.IssueTokenResponse = await service.issue_token_by_login_form(request, db, redis, form_data)
     logger.info(f"User '{form_data.username}' logged in and tokens issued.")
     
     auth_cookie_handler.set_token_cookies(
@@ -64,9 +67,10 @@ async def refresh_token(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> JSONResponse:
     """리프래시 토큰으로 액세스 토큰 직접 재발급"""
-    tokens: service.IssueTokenResponse = await service.rotate_tokens(request, db)
+    tokens: service.IssueTokenResponse = await service.rotate_tokens(request, db, redis)
     logger.info(f"Refresh token used to issue new access token.")
 
     auth_cookie_handler.set_token_cookies(
@@ -80,12 +84,13 @@ async def refresh_token(
     )
 
 
-@token_router.delete("/", description="로그아웃 처리 및 토큰 무효화")
+@token_router.delete("", description="로그아웃 처리 및 토큰 무효화")
 async def revoke_token(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> None:
-    await service.revoke_token(request, db)
+    await service.revoke_token(request, db, redis)
     auth_cookie_handler.delete_token_cookies(response)
     return schemas.AuthTokenRevokeResponse()

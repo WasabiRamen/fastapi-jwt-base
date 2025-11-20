@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 # Third-party imports
 import ipaddress
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 # FastAPI imports
 from fastapi.requests import Request
@@ -15,13 +16,14 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 # App imports
-from . import crud
+from . import crud, redis_session
 from ..core.security.password_hasher import PasswordHasher
 from ..core.security.access_token import AccessTokenService
 from ..core.security.refresh_token import RefreshTokenService
 from ..core.security.email_token import EmailTokenManager
 from ..core.security.google_oauth2 import GoogleOAuth2Client
 from ..core.form.verify_email_form import verify_email_form
+from ..tools.rsa_keys.loader import load_public_key
 
 
 # Shared Core imports
@@ -66,7 +68,7 @@ def _get_client_ip(request: Request) -> str:
 # -------------------------------- Token Business Logic ---------------------------
 
 password_hasher = PasswordHasher(auth_settings.BCRYPT_ROUNDS)
-access_token_service = AccessTokenService("HS256", auth_settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+access_token_service = AccessTokenService("RS256", auth_settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 refresh_token_service = RefreshTokenService(
     expire_days=auth_settings.REFRESH_TOKEN_EXPIRE_DAYS,
     store_hashed=auth_settings.REFRESH_TOKEN_STORE_HASHED,
@@ -106,11 +108,63 @@ class IssueTokenResponse(BaseModel):
     access_token: AccessTokenService.TokenResponse
     refresh_token: RefreshTokenService.TokenResponse
 
-def get_secret_key(app) -> str:
+
+class _KeyResponse(BaseModel):
     """
-    애플리케이션의 비밀 키 반환
+    비밀 키 응답 모델
     """
-    return app.state.jwt_manager.current_secret.secret_key
+    private_key: rsa.RSAPrivateKey
+    kid: str
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+def get_current_private_key(app) -> _KeyResponse:
+    """
+    애플리케이션의 비밀 키 및 키 ID 반환
+    """
+    return _KeyResponse(
+        private_key=app.state.rsa_key_manager.current_key,
+        kid=app.state.rsa_key_manager.current_kid
+    )
+
+def get_jwt_header_kid(token: str) -> str:
+    """
+    JWT 토큰 헤더에서 키 ID (kid) 추출
+    """
+    try:
+        headers = AccessTokenService.decode_header(token)
+        kid = headers.get("kid")
+        if not kid:
+            raise ValueError("키 ID(kid)가 토큰 헤더에 없습니다.")
+        return kid
+    except Exception as e:
+        logger.error(f"Failed to decode JWT headers: {e}")
+        raise
+
+
+async def revoke_tampered_tokens(
+    db: AsyncSession,
+    redis: Redis,
+    session_id: str = None,
+) -> None:
+    """
+    변조된 토큰 무력화 처리
+    
+    Description:
+        토큰 변조나 탈취가 감지되었을 때 세션을 무효화
+        - Redis 세션 삭제
+        - DB의 모든 리프레시 토큰 비활성화
+    
+    Args:
+        db: 데이터베이스 세션
+        redis: Redis 클라이언트
+    """
+    session = await redis_session.RedisSession(redis).get(session_id)
+    if session:
+        refresh_token = session.refresh_token
+        await redis_session.RedisSession(redis).delete(session_id)
+        await crud.deactivate_refresh_token(db, refresh_token)
+    
 
 
 async def create_auth_user(
@@ -165,6 +219,7 @@ async def create_auth_user(
 async def _issue_token(
     request: Request,
     db: AsyncSession,
+    redis: Redis,
     user_uuid: str = None,
 ) -> IssueTokenResponse:
     """
@@ -173,8 +228,13 @@ async def _issue_token(
     Description:
         내부 함수로, 토큰 발급 로직을 캡슐화
     """
-    access_token = access_token_service.issue_token(user_uuid, get_secret_key(request.app))
+    # Access Token Generation
+    current_private_key = get_current_private_key(request.app)
+    private_key = current_private_key.private_key
+    kid = current_private_key.kid
+    access_token = access_token_service.issue_token(user_uuid, private_key, kid)
 
+    # Refresh Token Generation
     await crud.deactivate_refresh_token(db)
     refresh_token = refresh_token_service.create_token(user_uuid=str(user_uuid))
     await crud.issue_refresh_token(
@@ -183,7 +243,17 @@ async def _issue_token(
         token=refresh_token,
         ip_address=_get_client_ip(request),
         user_agent=request.headers.get("user-agent")
-    )  
+    )
+
+    await redis_session.RedisSession(redis).save(
+        session_id=refresh_token.session_id,
+        session=redis_session.SessionData(
+            user_uuid=user_uuid,
+            refresh_token=refresh_token.token,
+            expires_at=refresh_token.expires_at
+        ),
+        session_ttl=refresh_token.expires_in
+    )
 
     return IssueTokenResponse(
         access_token=access_token,
@@ -194,6 +264,7 @@ async def _issue_token(
 async def issue_token_by_login_form(
     request: Request,
     db: AsyncSession,
+    redis: Redis,
     form_data: OAuth2PasswordRequestForm
 ) -> IssueTokenResponse:
     """
@@ -216,6 +287,7 @@ async def issue_token_by_login_form(
     tokens =  await _issue_token(
         request,
         db,
+        redis=redis,
         user_uuid=user_uuid
     )
 
@@ -232,17 +304,23 @@ async def verify_access_token(
     Description:
         - 액세스 토큰의 유효성을 검사하고, 필요한 경우 사용자 정보를 반환
     """
-    secret_key = get_secret_key(request.app)
+    kid = get_jwt_header_kid(access_token)
+    public_key = await get_public_key(request.app, kid)
+
+    if not public_key:
+        logger.error(f"Public key not found for kid: {kid}")
+        raise AccessTokenService.InvalidTokenError("유효한 공개 키를 찾을 수 없습니다.")
+
     try:
-        payload = access_token_service.decode_token(access_token, secret_key)
+        payload = access_token_service.decode_token(access_token, public_key)
         user_uuid = payload.get("sub")
         return user_uuid
     except Exception as e:
         logger.error(f"Failed to verify access token: {e}")
-        return "Invalid access token"
+        raise AccessTokenService.InvalidTokenError("유효하지 않은 액세스 토큰입니다.")
 
 
-async def rotate_tokens(request: Request, db: AsyncSession) -> IssueTokenResponse:
+async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> IssueTokenResponse:
     """
     리프래시 토큰으로 액세스 토큰 재발급
 
@@ -252,25 +330,49 @@ async def rotate_tokens(request: Request, db: AsyncSession) -> IssueTokenRespons
         2. 토큰이 만료됨 -> InvalidTokenException 예외 발생, 비활성화 처리
         3. 토큰 소유자 불일치 -> InvalidTokenException 예외 발생
     """
-    secret_key = get_secret_key(request.app)
+    current_private_key = get_current_private_key(request.app)
+    private_key = current_private_key.private_key
+    kid = current_private_key.kid
+    session_id = request.cookies.get("session_id")
+    session_info = await redis_session.RedisSession(redis).get(session_id)
 
-    old_access_token = request.cookies.get("access_token")
-    decode_access_token = access_token_service.decode_token_without_expiration(old_access_token, secret_key)
-    user_uuid = decode_access_token.get("sub")
+    # Redis 내에 session_id가 없는 상태 (탈취 됨, 모든 토큰 무효화 처리)
+    if not session_info:
+        raise RefreshTokenNotFound("리프래시 토큰이 유효하지 않습니다.")
+
     old_refresh_token = request.cookies.get("refresh_token")
 
+    # Redis에 저장된 리프래시 토큰과 요청의 리프래시 토큰이 불일치
+    if session_info.refresh_token != old_refresh_token:
+        await revoke_tampered_tokens(
+            db,
+            redis,
+            session_id=session_id
+        )
+        raise InvalidRefreshTokenException("리프래시 토큰이 유효하지 않습니다.")
+
     old_refresh_token_data = await crud.get_refresh_token(db, old_refresh_token)
+
+    # DB 내에 리프래시 토큰이 없는 상태 (탈취 혹은 변조 의심)
     if not old_refresh_token_data:
+        await revoke_tampered_tokens(
+            db,
+            redis,
+            session_id=session_id
+        )
         raise RefreshTokenNotFound("리프래시 토큰이 유효하지 않습니다.")
     
+    # 리프래시 토큰이 만료된 상태
     now_utc = datetime.now(timezone.utc).timestamp()
     if old_refresh_token_data.expires_at.timestamp() < now_utc:
-        await crud.deactivate_refresh_token(db, old_refresh_token)
+        await revoke_tampered_tokens(
+            db,
+            redis,
+            session_id=session_id
+        )
         raise InvalidRefreshTokenException("리프래시 토큰이 만료되었습니다.")
-
-    if str(old_refresh_token_data.user_uuid) != str(user_uuid):
-        logger.warning("리프래시 토큰의 소유자 정보가 일치하지 않습니다.")
-        raise InvalidRefreshTokenException("리프래시 토큰의 소유자 정보가 일치하지 않습니다.")
+    
+    user_uuid = old_refresh_token_data.user_uuid
 
     refresh_token = refresh_token_service.create_token(user_uuid=str(user_uuid))
     await crud.issue_refresh_token(
@@ -280,7 +382,17 @@ async def rotate_tokens(request: Request, db: AsyncSession) -> IssueTokenRespons
         ip_address=_get_client_ip(request),
         user_agent=request.headers.get("user-agent")
     )
-    access_token = access_token_service.issue_token(user_uuid, secret_key)
+    await redis_session.RedisSession(redis).save(
+        session_id=refresh_token.session_id,
+        session=redis_session.SessionData(
+            user_uuid=user_uuid,
+            refresh_token=refresh_token.token,
+            expires_at=refresh_token.expires_at
+        ),
+        session_ttl=refresh_token.expires_in
+    )
+
+    access_token = access_token_service.issue_token(user_uuid, private_key, kid=kid)
 
     return IssueTokenResponse(
         access_token=access_token,
@@ -291,12 +403,16 @@ async def rotate_tokens(request: Request, db: AsyncSession) -> IssueTokenRespons
 async def revoke_token(
     request: Request,
     db: AsyncSession,
+    redis: Redis
 ) -> None:
     """
     토큰 무효화 처리
     """
     access_token = request.cookies.get("access_token")
     refresh_token = request.cookies.get("refresh_token")
+    session_id = request.cookies.get("session_id")
+
+    await redis_session.RedisSession(redis).delete(session_id)
 
     access_token_user_uuid = access_token_service.decode_token_without_validation(access_token).get("sub")
     refresh_token = await crud.get_refresh_token(db, refresh_token)
@@ -307,6 +423,20 @@ async def revoke_token(
         raise InvalidRefreshTokenException("토큰의 소유자 정보가 일치하지 않습니다.")
 
     await crud.deactivate_refresh_token(db, refresh_token.refresh_token)
+
+
+async def get_public_key(
+        db: AsyncSession,
+        kid: str
+        ) -> dict:
+    """
+    공개키 조회 후 있으면, 문자열로 반환
+    """
+    public_key = await crud.get_rsa_public_key(db, kid)
+    if not public_key:
+        return None
+    key_str = await load_public_key(public_key.public_key_path)
+    return key_str
 
 # -------------------------- Email Verification Business Logic --------------------
 

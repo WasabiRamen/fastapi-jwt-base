@@ -7,7 +7,8 @@ from .models import (
     AuthUser,
     AuthOAuthAccount, 
     AuthEmailVerification, 
-    AuthRefreshToken
+    AuthRefreshToken,
+    RSAKey
 )
 
 from ..core.security.refresh_token import RefreshTokenService
@@ -107,6 +108,17 @@ async def get_refresh_token(
     )
     db_token = result.scalars().first()
     return db_token
+
+
+async def get_rsa_public_key(db: AsyncSession, kid: str):
+    """활성화된 공개 키 목록 조회"""
+    result = await db.execute(
+        select(RSAKey).where(
+            RSAKey.kid == kid
+        )
+    )
+    key = result.scalars().first()
+    return key
 
 # Email CRUD Functions
 # -----------------------------------------------------------------

@@ -4,6 +4,10 @@ import hashlib
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
+def create_session_id() -> str:
+    """세션 토큰 생성 (CSPRNG 기반 16바이트 랜덤 문자열)"""
+    return secrets.token_urlsafe(16)
+
 class RefreshTokenService:
     """
     리프래시 토큰 관리 유틸리티
@@ -28,6 +32,7 @@ class RefreshTokenService:
         expires_in: int = Field(..., description="토큰 만료까지 남은 시간(초)")
         expires_at: int = Field(..., description="토큰 만료 시간(Unix timestamp)")
         user_uuid: str = Field(..., description="토큰 소유자 UUID (DB 저장용)")
+        session_id: str = Field(default_factory=create_session_id, description="세션 식별자")
 
     def get_expiration_datetime(self) -> tuple[int, int, int]:
         create_at = round(datetime.now(timezone.utc).timestamp())
@@ -46,7 +51,8 @@ class RefreshTokenService:
             created_at=create_at,
             expires_in=expires_in,
             expires_at=expires_at,
-            user_uuid=user_uuid
+            user_uuid=user_uuid,
+            session_id=create_session_id()
         )
 
     def verify_token(self, token: str, stored_token: str) -> bool:

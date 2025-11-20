@@ -49,6 +49,7 @@ class CORSSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
+        env_prefix="CORS_",
         case_sensitive=True,
         extra="ignore",
     )
@@ -69,7 +70,9 @@ class LoggingSettings(BaseSettings):
 
 class AuthSettings(BaseSettings):
     BCRYPT_ROUNDS: int = Field(default=12)
-    SECRET_KEY_PATH: str = Field(default="./app/api/v1/auth/tools/jwt_secret.key")
+    # SECRET_KEY_PATH: str = Field(default="./app/api/v1/auth/tools/jwt_secret.key")
+    RSA_PRIVATE_KEY_PATH: str = Field(default="./")  # BasePath 만 작성 (파일 명 자동 생성)
+    RSA_PUBLIC_KEY_PATH: str = Field(default="./")  # BasePath 만 작성 (파일 명 자동 생성)
     SECRET_KEY_ROTATION_DAYS: int = Field(default=30)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
 

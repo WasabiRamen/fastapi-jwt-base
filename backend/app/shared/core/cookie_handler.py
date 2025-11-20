@@ -29,7 +29,17 @@ class AuthCookieHandler:
             httponly=True,
             secure=self.secure,
             samesite=self.samesite,
-            max_age=refresh_token.expires_at - refresh_token.created_at,
+            max_age=refresh_token.expires_in,
+            path=self.path
+        )
+
+        response.set_cookie(
+            key="session_id",
+            value=refresh_token.session_id,
+            httponly=True,
+            secure=self.secure,
+            samesite=self.samesite,
+            max_age=refresh_token.expires_in,
             path=self.path
         )
         return response
@@ -38,6 +48,7 @@ class AuthCookieHandler:
     def delete_token_cookies(response: Response) -> Response:
         response.delete_cookie("access_token", path="/")
         response.delete_cookie("refresh_token", path="/")
+        response.delete_cookie("session_id", path="/")
         return response
     
     

@@ -35,9 +35,19 @@ from app.shared.core.redis import (
 from app.shared.core.async_mail_client import AsyncEmailClient
 
 # Services
-from app.service.auth.core.security import JWTSecretService
+from app.service.auth.tools.rsa_keys.key_rotation import RSAKeyRotation
 from app.service.auth import router as auth_router
 from app.service.accounts import router as accounts_router
+
+
+"""
+@Todo:
+    - 예외 처리 및 리팩토링 (Auth Service / Shared Tool - Token)
+    - 로깅 상세화
+    - 테스트 케이스 작성
+    - 문서화
+    - API 성능 테스트 (부하 테스트)
+"""
 
 
 auth_settings = get_auth_settings()
@@ -51,16 +61,16 @@ smtp_runtime = get_smtp_runtime()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # JWT Key Manager
-    manager = JWTSecretService(
-        auth_settings.SECRET_KEY_PATH,
-        auth_settings.SECRET_KEY_ROTATION_DAYS
-    )
-    await manager.init()
-    app.state.jwt_manager = manager
-
-    # DB
+    # DB 먼저 초기화 (다른 컴포넌트가 세션메이커를 사용하므로 선행)
     await init_db(app, database_runtime)
+
+    # JWT Key Manager (DB 초기화 이후에 실행, app 전달)
+    rsa_key_rotation = RSAKeyRotation(
+        private_key_path=auth_settings.RSA_PRIVATE_KEY_PATH,
+        public_key_path=auth_settings.RSA_PUBLIC_KEY_PATH,
+    )
+    await rsa_key_rotation.init(app)
+    app.state.rsa_key_manager = rsa_key_rotation
 
     # Redis
     await init_redis(app, redis_runtime)
@@ -77,7 +87,7 @@ async def lifespan(app: FastAPI):
             ("SMTP", app.state.smtp.disconnect),
             ("Redis", lambda: close_redis(app)),
             ("DB", lambda: close_db(app)),
-            ("Scheduler", lambda: asyncio.to_thread(manager.scheduler.shutdown, wait=True)),
+            ("Scheduler", lambda: asyncio.to_thread(rsa_key_rotation.scheduler.shutdown, wait=True)),
         ]
         for name, task in cleanup_tasks:
             try:
@@ -97,6 +107,8 @@ app = FastAPI(
 # Bind Routers
 app.include_router(auth_router)
 app.include_router(accounts_router)
+
+app.state.public_keys = {}  # 초기값 설정
 
 # CORS 설정 - HTTP 테스트 가능하도록 설정
 app.add_middleware(

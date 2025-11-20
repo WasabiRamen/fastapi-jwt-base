@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud
 
 # Shared imports
-from app.shared.tools.security_tools import AccessTokenPayload
+from app.shared.tools.token.get_token_rotator import get_token_rotator
 
 # Auth Service imports (차후 gRPC로 분리 예정)
 from app.service.auth.app.service import create_auth_user, link_oauth_account, google_code_to_token
@@ -58,7 +58,7 @@ async def create_account(
 
 async def get_current_user(
         db: AsyncSession,
-        token_payload: AccessTokenPayload
+        token_payload: get_token_rotator
     ):
     result = await crud.get_account_by_uuid(
         db=db,
@@ -71,7 +71,7 @@ async def link_provider(
          db: AsyncSession,
          code: str,
          provider: str,
-         token_payload: AccessTokenPayload
+         token_payload: get_token_rotator
 ):
     """
     APP TOKEN으로 OAuth 계정 연결 처리

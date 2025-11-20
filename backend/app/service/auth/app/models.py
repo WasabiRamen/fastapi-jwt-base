@@ -112,3 +112,26 @@ class AuthEmailVerification(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_verified = Column(Boolean, default=False)
     is_used = Column(Boolean, default=False)
+
+
+class RSAKey(Base):
+    """
+    RSA 키 메타데이터 ORM 모델
+
+    Columns:
+        kid: String, 기본 키로 사용되는 키 식별자
+        private_key_path: String, RSA 개인키 파일 경로
+        public_key_path: String, RSA 공개키 파일 경로
+        created_at: DateTime, 키 생성 시간
+        expires_at: DateTime, 키 만료 시간
+        verify_until: DateTime, 키 검증 유효 기간 (선택적)
+    """
+
+    __tablename__ = "rsa_key"
+
+    kid = Column(String, primary_key=True, nullable=False)
+    private_key_path = Column(String, nullable=False)
+    public_key_path = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    verify_until = Column(DateTime(timezone=True), nullable=True)

@@ -8,7 +8,7 @@ from . import schemas, service, exceptions
 
 # Shared imports
 from app.shared.core.database import get_db
-from app.shared.tools.security_tools import get_token, AccessTokenPayload
+from app.shared.tools.token.get_token_rotator import get_token_rotator, AccessTokenPayload
 
 router = APIRouter(prefix="/accounts")
 
@@ -32,7 +32,7 @@ async def create_account(
 @router.get("/me", description="Get current user's account information")
 async def get_current_user_account(
     db: AsyncSession = Depends(get_db),
-    token_payload: AccessTokenPayload = Depends(get_token)
+    token_payload: AccessTokenPayload = Depends(get_token_rotator)
 ):
     user = await service.get_current_user(db, token_payload)
     if not user:
@@ -45,7 +45,7 @@ async def link_provider(
     request: Request,
     form: schemas.LinkProviderRequest,
     db: AsyncSession = Depends(get_db),
-    token_payload: AccessTokenPayload = Depends(get_token)
+    token_payload: AccessTokenPayload = Depends(get_token_rotator)
 ):
     """구글 OAuth2 계정 연결 처리"""
     result = await service.link_provider(request, db, form.code, "google", token_payload)
