@@ -39,10 +39,18 @@ from app.service.auth.tools.rsa_keys.key_rotation import RSAKeyRotation
 from app.service.auth import router as auth_router
 from app.service.accounts import router as accounts_router
 
+# Exception handlers
+from app.service.auth import (
+    register_token_exception_handlers,
+    register_email_verification_exception_handlers,
+    register_oauth_exception_handlers,
+)
+
 
 """
 @Todo:
     - 예외 처리 및 리팩토링 (Auth Service / Shared Tool - Token)
+    - Email Token -> Cookie 처리 변경 검토
     - 로깅 상세화
     - 테스트 케이스 작성
     - 문서화
@@ -103,6 +111,11 @@ app = FastAPI(
     lifespan=lifespan,
     prefix="/api"
     )
+
+# Register Exception Handlers
+register_token_exception_handlers(app)
+register_email_verification_exception_handlers(app)
+register_oauth_exception_handlers(app)
 
 # Bind Routers
 app.include_router(auth_router)

@@ -12,11 +12,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 # FastAPI imports
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 # App imports
-from . import crud, redis_session
+from . import crud, redis_session, exceptions
 from ..core.security.password_hasher import PasswordHasher
 from ..core.security.access_token import AccessTokenService
 from ..core.security.refresh_token import RefreshTokenService
@@ -75,29 +74,6 @@ refresh_token_service = RefreshTokenService(
     byte_length=auth_settings.REFRESH_TOKEN_BYTE_LENGTH
 )
 
-# ----------------------------- Exception Handling -----------------------
-
-class UserNotFoundException(Exception):
-    """사용자 미발견 예외"""
-    pass
-
-
-class InvalidPasswordException(Exception):
-    """잘못된 비밀번호 예외"""
-    pass
-
-class RefreshTokenNotFound(Exception):
-    """리프래시 토큰 미발견 예외"""
-    pass
-
-class InvalidRefreshTokenException(Exception):
-    """잘못된 리프래시 토큰 예외"""
-    pass
-
-class InvalidEmailTokenException(Exception):
-    """잘못된 이메일 인증 토큰 예외"""
-    pass
-
 # ------------------------------------------------------------------------
 
 
@@ -135,7 +111,7 @@ def get_jwt_header_kid(token: str) -> str:
         headers = AccessTokenService.decode_header(token)
         kid = headers.get("kid")
         if not kid:
-            raise ValueError("키 ID(kid)가 토큰 헤더에 없습니다.")
+            raise exceptions.RefreshSessionNotFoundError("키 ID(kid)가 토큰 헤더에 없습니다.")
         return kid
     except Exception as e:
         logger.error(f"Failed to decode JWT headers: {e}")
@@ -187,15 +163,14 @@ async def create_auth_user(
         token=email_token
     )
     if not existing_email_token:
-        raise InvalidEmailTokenException("이메일 인증 토큰이 유효하지 않습니다.")
-
+        raise exceptions.EmailVerificationNotFoundError("이메일 인증 토큰이 유효하지 않습니다.")
     verify_email = await crud.is_email_verified(
         db,
         token=email_token
     )
 
     if not verify_email:
-        raise InvalidEmailTokenException("이메일 인증이 완료되지 않았습니다.")
+        raise exceptions.EmailVerificationInvalidTokenError("이메일 인증이 완료되지 않았습니다.")
     
     await crud.update_email_verification_code_as_used(
         db,
@@ -278,7 +253,7 @@ async def issue_token_by_login_form(
     """
     user = await crud.get_user_by_user_id(db, form_data.username)
     if not user:
-        raise UserNotFoundException()
+        raise exceptions.UserNotFoundError("사용자를 찾을 수 없습니다.")
     
     password_hasher.verify_password(form_data.password, user.password)
 
@@ -309,7 +284,7 @@ async def verify_access_token(
 
     if not public_key:
         logger.error(f"Public key not found for kid: {kid}")
-        raise AccessTokenService.InvalidTokenError("유효한 공개 키를 찾을 수 없습니다.")
+        raise exceptions.InvalidAccessTokenError("유효한 공개 키를 찾을 수 없습니다.")
 
     try:
         payload = access_token_service.decode_token(access_token, public_key)
@@ -317,7 +292,7 @@ async def verify_access_token(
         return user_uuid
     except Exception as e:
         logger.error(f"Failed to verify access token: {e}")
-        raise AccessTokenService.InvalidTokenError("유효하지 않은 액세스 토큰입니다.")
+        raise exceptions.InvalidAccessTokenError("유효하지 않은 액세스 토큰입니다.")
 
 
 async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> IssueTokenResponse:
@@ -338,7 +313,7 @@ async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> Iss
 
     # Redis 내에 session_id가 없는 상태 (탈취 됨, 모든 토큰 무효화 처리)
     if not session_info:
-        raise RefreshTokenNotFound("리프래시 토큰이 유효하지 않습니다.")
+        raise exceptions.RefreshSessionNotFoundError("리프래시 토큰이 유효하지 않습니다.")
 
     old_refresh_token = request.cookies.get("refresh_token")
 
@@ -349,7 +324,7 @@ async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> Iss
             redis,
             session_id=session_id
         )
-        raise InvalidRefreshTokenException("리프래시 토큰이 유효하지 않습니다.")
+        raise exceptions.RefreshSessionMismatchError("리프래시 토큰이 유효하지 않습니다.")
 
     old_refresh_token_data = await crud.get_refresh_token(db, old_refresh_token)
 
@@ -360,7 +335,7 @@ async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> Iss
             redis,
             session_id=session_id
         )
-        raise RefreshTokenNotFound("리프래시 토큰이 유효하지 않습니다.")
+        raise exceptions.RefreshTokenNotFoundError("리프래시 토큰이 유효하지 않습니다.")
     
     # 리프래시 토큰이 만료된 상태
     now_utc = datetime.now(timezone.utc).timestamp()
@@ -370,7 +345,7 @@ async def rotate_tokens(request: Request, db: AsyncSession, redis: Redis) -> Iss
             redis,
             session_id=session_id
         )
-        raise InvalidRefreshTokenException("리프래시 토큰이 만료되었습니다.")
+        raise exceptions.ExpiredRefreshTokenError("리프래시 토큰이 만료되었습니다.")
     
     user_uuid = old_refresh_token_data.user_uuid
 
@@ -420,7 +395,7 @@ async def revoke_token(
 
     if str(access_token_user_uuid) != str(refresh_token_user_uuid):
         logger.warning("액세스 토큰과 리프래시 토큰의 소유자 정보가 일치하지 않습니다.")
-        raise InvalidRefreshTokenException("토큰의 소유자 정보가 일치하지 않습니다.")
+        raise exceptions.InvalidAccessTokenError("토큰의 소유자 정보가 일치하지 않습니다.")
 
     await crud.deactivate_refresh_token(db, refresh_token.refresh_token)
 
@@ -434,7 +409,7 @@ async def get_public_key(
     """
     public_key = await crud.get_rsa_public_key(db, kid)
     if not public_key:
-        return None
+        raise exceptions.InvalidAccessTokenError("유효한 공개 키를 찾을 수 없습니다.")
     key_str = await load_public_key(public_key.public_key_path)
     return key_str
 
@@ -444,12 +419,6 @@ email_token_manager = EmailTokenManager(
     email_verify_settings.VERIFY_TOKEN_EXPIRE_MINUTES,
     email_verify_settings.VERIFY_CODE_LENGTH
 )
-
-# ----------------------------- Exception Handling -----------------------
-
-class InvalidEmailTokenException(Exception):
-    """잘못된 이메일 인증 토큰 예외"""
-    pass
 
 # ------------------------------------------------------------------------
 
@@ -462,6 +431,9 @@ async def send_email_verification(
     """
     이메일 인증 토큰 및 코드 발급
     """
+    if await crud.existing_email_verified(db, email):
+        raise exceptions.EmailAlreadyVerifiedError("이미 인증된 이메일 주소입니다.")
+
     verify: EmailTokenManager.EmailVerifyResponse = email_token_manager.create_token(email)
 
     body = verify_email_form(
@@ -497,39 +469,33 @@ async def send_email_verification(
         expires_at=verify.expires_at
     )
 
-    response_data = {
-        "email": email,
-        "token": verify.token,
-        "expires_at": verify.expires_at,
-        "created_at": verify.created_at
-    }
-
-    return JSONResponse(response_data)
-
+    return verify
 
 async def verify_email_token(
     db: AsyncSession,
     redis: Redis,
     token: str,
     code: str,
-) -> JSONResponse:
+) -> None:
     """
     이메일 인증 토큰 및 코드 검증
+
+    예외 혹은 None 반환
     """
     redis_data = await redis.get(token)
     if not redis_data:
-        raise InvalidEmailTokenException("이메일 인증 토큰이 유효하지 않거나 만료되었습니다.")
+        raise exceptions.EmailVerificationInvalidTokenError("이메일 인증 토큰이 유효하지 않거나 만료되었습니다.")
 
     data = json.loads(redis_data)
 
     if data.get("code") != code:
-        raise InvalidEmailTokenException("이메일 인증 코드가 일치하지 않습니다.")
+        raise exceptions.EmailVerificationCodeMismatchError("이메일 인증 코드가 일치하지 않습니다.")
 
     # 검증 성공 시, Redis에서 해당 토큰 삭제
     await redis.delete(token)
     await crud.update_email_verification_code_as_verified(db, token)
 
-    return JSONResponse({"message": "이메일 인증이 완료되었습니다."})
+    return data.get("email")
 
 # -------------------------------- Google Business Logic --------------------------
 
@@ -575,7 +541,7 @@ async def google_login(
     )
     if not user:
         # 신규 사용자 생성 로직 필요
-        raise UserNotFoundException("구글 계정과 연동된 사용자를 찾을 수 없습니다.")
+        raise exceptions.UserNotFoundError("구글 계정과 연동된 사용자를 찾을 수 없습니다.")
 
     tokens =  await _issue_token(
         request,
@@ -594,7 +560,7 @@ async def google_code_to_token(
     """
     google_user_info = await google_oauth2_client.code_to_token(code)
     if not google_user_info:
-       raise InvalidGoogleTokenException("구글 인증에 실패했습니다.")
+       raise exceptions.InvalidGoogleTokenException("구글 인증에 실패했습니다.")
     
     return google_user_info
 
@@ -618,7 +584,7 @@ async def link_oauth_account(
         provider=provider,
         provider_id=provider_id
     ):
-        raise InvalidGoogleTokenException("해당 OAuth 계정은 이미 연결되어 있거나 연동할 수 없습니다.")
+        raise exceptions.ProviderAccountAlreadyLinkedException("해당 OAuth 계정은 이미 연결되어 있거나 연동할 수 없습니다.")
 
     # 4. OAuth 계정 연결
     await crud.link_oauth_account(

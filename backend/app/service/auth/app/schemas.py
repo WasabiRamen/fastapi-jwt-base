@@ -5,6 +5,8 @@ from enum import Enum
 class ResponseCode(Enum):
     AUTH_TOKEN_ISSUED = "AUTH_TOKEN_ISSUED"
     AUTH_TOKEN_REVOKED = "AUTH_TOKEN_REVOKED"
+    EMAIL_TOKEN_ISSUED = "EMAIL_TOKEN_ISSUED"
+    EMAIL_VERIFIED = "EMAIL_VERIFIED"
 
 
 class SendEmailRequest(BaseModel):
@@ -13,7 +15,6 @@ class SendEmailRequest(BaseModel):
 
 class VerifyEmailRequest(BaseModel):
     """이메일 인증 코드 검증 요청 스키마"""
-    token: str = Field(..., description="이메일 인증 토큰")
     code: str = Field(..., description="이메일 인증 코드")
 
 
@@ -60,3 +61,18 @@ class AuthTokenIssueResponse(BaseModel):
 class AuthTokenRevokeResponse(BaseModel):
     detail: str = "토큰이 무효화되었습니다."
     code: str = ResponseCode.AUTH_TOKEN_REVOKED.value
+
+
+
+# -------------------------------- Email Verify Login Response --------------------------------
+
+class EmailTokenIssueResponse(BaseModel):
+    email: EmailStr = Field(..., description="이메일 주소")
+    detail: str = "이메일이 발송되었습니다."
+    code: str = ResponseCode.EMAIL_TOKEN_ISSUED.value
+
+
+class EmailVerifySuccessResponse(BaseModel):
+    email: EmailStr = Field(..., description="이메일 주소")
+    detail: str = "이메일 인증이 완료되었습니다."
+    code: str = ResponseCode.EMAIL_VERIFIED.value

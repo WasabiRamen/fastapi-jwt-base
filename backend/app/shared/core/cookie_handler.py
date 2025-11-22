@@ -1,6 +1,12 @@
 from fastapi import Response
+from enum import Enum
 
 class AuthCookieHandler:
+    class TokenType(Enum):
+        ACCESS = "access_token"
+        REFRESH = "refresh_token"
+        SESSION = "session_id"
+
     def __init__(self, secure: bool, path: str, samesite: str):
         self.secure = secure
         self.path = path
@@ -14,7 +20,7 @@ class AuthCookieHandler:
         ) -> Response:
         
         response.set_cookie(
-            key="access_token",
+            key=self.TokenType.ACCESS.value,
             value=access_token.token,
             httponly=True,
             secure=self.secure,
@@ -24,7 +30,7 @@ class AuthCookieHandler:
         )
 
         response.set_cookie(
-            key="refresh_token",
+            key=self.TokenType.REFRESH.value,
             value=refresh_token.token,
             httponly=True,
             secure=self.secure,
@@ -34,7 +40,7 @@ class AuthCookieHandler:
         )
 
         response.set_cookie(
-            key="session_id",
+            key=self.TokenType.SESSION.value,
             value=refresh_token.session_id,
             httponly=True,
             secure=self.secure,
@@ -43,16 +49,24 @@ class AuthCookieHandler:
             path=self.path
         )
         return response
+    
+    def get_token_cookies(self, request) -> tuple[str | None, str | None]:
+        access_token = request.cookies.get(self.TokenType.ACCESS.value)
+        refresh_token = request.cookies.get(self.TokenType.REFRESH.value)
+        session_id = request.cookies.get(self.TokenType.SESSION.value)
+        return access_token, refresh_token, session_id
 
     @staticmethod
-    def delete_token_cookies(response: Response) -> Response:
-        response.delete_cookie("access_token", path="/")
-        response.delete_cookie("refresh_token", path="/")
-        response.delete_cookie("session_id", path="/")
+    def delete_token_cookies(self, response: Response) -> Response:
+        response.delete_cookie(self.TokenType.ACCESS.value, path=self.path)
+        response.delete_cookie(self.TokenType.REFRESH.value, path=self.path)
+        response.delete_cookie(self.TokenType.SESSION.value, path=self.path)
         return response
     
     
 class EmailVerifyCookieHandler:
+    __email_verify_cookie_key = "email_verify_token"
+
     def __init__(self, secure: bool, path: str, samesite: str):
         self.secure = secure
         self.path = path
@@ -66,7 +80,7 @@ class EmailVerifyCookieHandler:
         ) -> Response:
         
         response.set_cookie(
-            key="email_verify_token",
+            key=self.__email_verify_cookie_key,
             value=verify_token,
             httponly=True,
             secure=self.secure,
@@ -75,8 +89,11 @@ class EmailVerifyCookieHandler:
             path=self.path
         )
         return response
+    
+    def get_email_verify_cookie(self, request) -> str | None:
+        verify_token = request.cookies.get(self.__email_verify_cookie_key)
+        return verify_token
 
-    @staticmethod
-    def delete_email_verify_cookie(response: Response) -> Response:
-        response.delete_cookie("email_verify_token", path="/")
+    def delete_email_verify_cookie(self, response: Response) -> Response:
+        response.delete_cookie(self.__email_verify_cookie_key, path=self.path)
         return response

@@ -6,6 +6,7 @@ RSA 키 쌍 생성기 유틸리티
 # Standard Library
 from datetime import datetime, timezone
 from uuid import uuid4
+from pathlib import Path
 
 # Pydantic
 from pydantic import BaseModel, Field
@@ -78,14 +79,17 @@ def generate_rsa_key_pair() -> RSAKeyPair:
 
 async def key_save(file_path: str, key_string: str) -> None:
     """
-    RSA 개인키를 PEM 파일로 저장하는 유틸 함수
+    RSA 키(PK/공개키)를 PEM 파일로 저장하는 유틸 함수
 
     Args:
-        file_path (str): PEM 파일 경로
+        file_path (str): PEM 파일 경로 (디렉터리가 없으면 생성)
+        key_string (str): 저장할 PEM 문자열
     """
     if not file_path.endswith(".pem"):
         raise ValueError("file_path 확장자는 .pem 이어야 합니다.")
-    
-    with open(file_path, "w") as f:
-        f.write(key_string)
+
+    path = Path(file_path)
+    # 상위 디렉터리가 없을 경우 재귀적으로 생성
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(key_string)
     

@@ -79,8 +79,6 @@ async def issue_refresh_token(
     ) -> None:
     """
     리프래시 토큰 발급 및 저장
-
-    @TODO: 기기별 토큰 관리 필요
     """
     # 새로운 리프래시 토큰 생성
     db_refresh_token = AuthRefreshToken(
@@ -128,6 +126,22 @@ async def existing_email_token(db: AsyncSession, token: str) -> bool:
     result = await db.execute(
         select(AuthEmailVerification).where(
             AuthEmailVerification.token == token,
+        )
+    )
+    code = result.scalars().first()
+    return code is not None
+
+async def existing_email_verified(db: AsyncSession, email: str) -> bool:
+    """
+    이메일이 이미 인증되었는지 확인
+
+    인증이 되었고, 사용된 토큰이 존재하면, True 반환
+    """
+    result = await db.execute(
+        select(AuthEmailVerification).where(
+            AuthEmailVerification.email == email,
+            AuthEmailVerification.is_verified == True,
+            AuthEmailVerification.is_used == True
         )
     )
     code = result.scalars().first()
