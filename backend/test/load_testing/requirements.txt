@@ -1,0 +1,12 @@
+# Load Testing Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core load testing framework
+locust==2.20.0
+
+# Additional utilities
+requests==2.31.0
+urllib3==2.1.0
+
+# For better logging and data handling
+python-dotenv==1.0.0

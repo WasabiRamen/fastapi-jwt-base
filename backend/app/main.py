@@ -45,6 +45,9 @@ from app.service.auth import (
     register_email_verification_exception_handlers,
     register_oauth_exception_handlers,
 )
+from app.service.accounts import (
+    register_accounts_exception_handlers,
+)
 
 
 """
@@ -116,6 +119,7 @@ app = FastAPI(
 register_token_exception_handlers(app)
 register_email_verification_exception_handlers(app)
 register_oauth_exception_handlers(app)
+register_accounts_exception_handlers(app)
 
 # Bind Routers
 app.include_router(auth_router)

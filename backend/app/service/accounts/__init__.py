@@ -9,11 +9,14 @@ from fastapi import APIRouter
 
 # App imports
 from .app.router import router as accounts_router
+from .app.exceptions import (register_accounts_exception_handlers)
+
 
 router = APIRouter(tags=["Accounts"])
 router.include_router(accounts_router)
 
 
 __all__ = [
-    "router"
+    "router",
+    "register_accounts_exception_handlers",
 ]
