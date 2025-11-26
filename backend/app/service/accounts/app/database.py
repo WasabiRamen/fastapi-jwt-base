@@ -1,31 +1,46 @@
 # backend/accounts/app/database.py
-import os
 from typing import AsyncGenerator, Optional
 from fastapi import FastAPI, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.engine import URL
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 from loguru import logger
-from urllib.parse import quote_plus
+
+
+# Declarative base for ORM models (was missing)
+Base = declarative_base()
 
 
 # 데이터베이스 init 할 때 필요 config
 class DatabaseSettings(BaseModel):
+    # URL Setting
     host: str = Field(..., description="데이터베이스 호스트")
     port: int = Field(..., description="데이터베이스 포트")
     user: str = Field(..., description="데이터베이스 사용자 이름")
     password: str = Field(..., description="데이터베이스 비밀번호")
     name: str = Field(..., description="데이터베이스 이름")
 
+    # Engine Setting
+    pool_pre_ping: bool = Field(True, description="커넥션 풀의 연결 상태를 확인할지 여부")
+    pool_size: int = Field(20, description="기본 연결 풀 크기")
+    max_overflow: int = Field(30, description="풀 초과 시 추가 생성 가능한 연결 수")
+    pool_recycle: int = Field(3600, description="연결 재생성 주기 (초 단위)")
+    pool_timeout: int = Field(30, description="연결 대기 시간 (초)")
+
 
 def get_database_url(setting: DatabaseSettings) -> str:
-    # 사용자/비밀번호에 특수문자가 포함될 수 있으므로 인코딩
-    user = quote_plus(setting.user)
-    password = quote_plus(setting.password)
-    return f"postgresql+asyncpg://{user}:{password}@{setting.host}:{setting.port}/{setting.name}"
-
-Base = declarative_base()
+    url = URL.create(
+        drivername="postgresql+asyncpg",
+        username=setting.user,
+        password=setting.password,
+        host=setting.host,
+        port=setting.port,
+        database=setting.name,
+    )
+    # hide_password=False로 비밀번호 포함한 문자열 반환
+    return url.render_as_string(hide_password=False)
 
 
 async def init_db(app: FastAPI, setting: DatabaseSettings) -> None:
@@ -34,7 +49,11 @@ async def init_db(app: FastAPI, setting: DatabaseSettings) -> None:
     """
     engine: AsyncEngine = create_async_engine(
         get_database_url(setting),
-        pool_pre_ping=True,  # 끊어진 커넥션 자동 감지
+        pool_pre_ping=setting.pool_pre_ping,  # 끊어진 커넥션 자동 감지
+        pool_size=setting.pool_size,  # 기본 연결 풀 크기 (기본값: 5)
+        max_overflow=setting.max_overflow,  # 풀 초과 시 추가 생성 가능한 연결 수 (기본값: 10)
+        pool_recycle=setting.pool_recycle,  # 1시간마다 연결 재생성 (초 단위)
+        pool_timeout=setting.pool_timeout,  # 연결 대기 시간 (초)
         future=True,
     )
     SessionLocal = sessionmaker(
@@ -45,6 +64,13 @@ async def init_db(app: FastAPI, setting: DatabaseSettings) -> None:
 
     app.state.db_engine = engine
     app.state.async_session_maker = SessionLocal
+
+    # 간단한 초기 연결 테스트 — 초기화 단계에서 문제를 빠르게 발견하기 위함
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("DB initial connection test failed")
 
     # 스키마 자동 생성(개발 환경에서만 사용 권장)
     try:
@@ -78,5 +104,9 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
 
 # 간단한 DB 헬스체크 쿼리 예시 유틸
 async def db_healthcheck(session: AsyncSession) -> bool:
-    result = await session.execute(text("SELECT 1"))
-    return (result.scalar() == 1)
+    try:
+        result = await session.execute(text("SELECT 1"))
+        return (result.scalar() == 1)
+    except Exception:
+        logger.exception("DB healthcheck failed")
+        return False
